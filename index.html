@@ -192,6 +192,8 @@ header{position:fixed;top:0;left:0;right:0;z-index:30;display:flex;align-items:c
 .mrow .mem{font-weight:500;flex:1;min-width:160px;word-break:break-all}
 #world svg path.couple.divorced,#world svg path.couple.separated{stroke-dasharray:6 6;stroke:var(--line)}
 #world svg path.couple.widowed{stroke-dasharray:2 5}
+#world svg path.uncertain{stroke-dasharray:3 5;stroke:var(--research)}
+.nee{font-size:11.5px;color:var(--muted);font-style:italic;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .ulabel{position:absolute;transform:translate(-50%,-50%);font-size:10px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);background:var(--bg);padding:1px 5px;border-radius:5px;border:1px solid var(--grid);pointer-events:none;white-space:nowrap}
 .p-head h2.editable{cursor:text}
 .p-head .ename{border:0;background:none;color:var(--muted);font-size:12px;padding:2px 0;text-decoration:underline;cursor:pointer}
@@ -487,7 +489,7 @@ function onData() {
   const hashId = decodeURIComponent(location.hash.slice(1));
   if (!state.focus || !people.has(state.focus)) {
     state.focus = people.has(hashId) ? hashId : (homeId && people.has(homeId) ? homeId : [...people.keys()][0]);
-    render(); centerOn(state.focus, false, true); firstData = false;
+    render(); if (state.focus === homeId) fit(); else centerOn(state.focus, false, true); firstData = false;
   } else render();
   if (state.sel && !people.has(state.sel)) closePanel();
   else if (state.sel) refreshPanel();
@@ -515,17 +517,21 @@ function layout(fid) {
       const xs = ps.map(p => { const w = W(p, g + 1); const px = place(p, s, g + 1); s += w * U; return px; });
       x = xs.reduce((a, b) => a + b, 0) / xs.length;
       const py = -(g + 1) * RH;
-      if (xs.length === 2) { seg(xs[0] + CW / 2, py, xs[1] - CW / 2, py, "couple", ps); seg(x, py, x, -g * RH - CH / 2); }
-      else seg(x, py + CH / 2, x, -g * RH - CH / 2);
+      const unc = (P(id).uncertain || []).some(u => ps.includes(u)) ? "uncertain" : undefined;
+      if (xs.length === 2) { seg(xs[0] + CW / 2, py, xs[1] - CW / 2, py, "couple", ps); seg(x, py, x, -g * RH - CH / 2, unc); }
+      else seg(x, py + CH / 2, x, -g * RH - CH / 2, unc);
     } else x = start + U / 2;
     nodes.push({ id, x, y: -g * RH, role: "anc" });
     return x;
   };
   const fpar = up >= 1 ? parentsOf(fid) : [];
+  let fRight = U / 2;
   if (fpar.length) {
     const gc = sibs.length ? -sibs.length * U / 2 : 0;
     const total = fpar.reduce((a, p) => a + W(p, 1), 0);
     let s = gc - total * U / 2;
+    if (parts.length && up >= 1 && parentsOf(parts[0]).length) s = Math.min(s, U / 2 - total * U);
+    fRight = s + total * U;
     const xs = fpar.map(p => { const w = W(p, 1); const x = place(p, s, 1); s += w * U; return x; });
     const pm = xs.reduce((a, b) => a + b, 0) / xs.length, py = -RH, busY = -RH / 2;
     if (xs.length === 2) seg(xs[0] + CW / 2, py, xs[1] - CW / 2, py, "couple", fpar);
@@ -533,6 +539,19 @@ function layout(fid) {
     const kx = [...sibs.map((_, i) => -(sibs.length - i) * U), 0];
     seg(Math.min(pm, ...kx), busY, Math.max(pm, ...kx), busY);
     kx.forEach(x => seg(x, busY, x, -CH / 2));
+  }
+
+  // the first partner's ancestors, so both sides of a couple show
+  const ppar = parts.length && up >= 1 ? parentsOf(parts[0]) : [];
+  if (ppar.length) {
+    const totalP = ppar.reduce((a, p) => a + W(p, 1), 0);
+    let s2 = Math.max(U - totalP * U / 2, fpar.length ? fRight : U / 2);
+    const xs = ppar.map(p => { const w = W(p, 1); const x = place(p, s2, 1); s2 += w * U; return x; });
+    const pm = xs.reduce((a, b) => a + b, 0) / xs.length, py = -RH, busY = -RH / 2 - 10;
+    if (xs.length === 2) seg(xs[0] + CW / 2, py, xs[1] - CW / 2, py, "couple", ppar);
+    seg(pm, xs.length === 2 ? py : py + CH / 2, pm, busY);
+    seg(Math.min(pm, U), busY, Math.max(pm, U), busY);
+    seg(U, busY, U, -CH / 2);
   }
 
   // descendants
@@ -596,6 +615,7 @@ function card(n) {
     h("div", { class: "tx" },
       h("div", { class: "nm", text: fullName(p) }),
       h("div", { class: "yr" + (life ? "" : " none"), text: life || "Dates unknown" }),
+      p.birthSurname && p.surname && p.birthSurname.trim().toLowerCase() !== p.surname.trim().toLowerCase() ? h("div", { class: "nee", text: "n\u00e9e " + p.birthSurname }) : null,
       p.birthPlace ? h("div", { class: "pl", text: p.birthPlace }) : null),
     h("i", { class: "dot " + (p.status || "research"), title: STATUS[p.status] || STATUS.research })
   );
@@ -644,7 +664,7 @@ function centerOn(id, anim, fitScale) {
 }
 function fit() {
   if (!L) return; const v = viewBox();
-  cam.k = Math.max(0.15, Math.min(1.2, v.w / L.w, v.h / L.h));
+  cam.k = Math.max(0.15, Math.min(1, (v.w - 24) / L.w, (v.h - 24) / L.h));
   cam.x = v.x + (v.w - L.w * cam.k) / 2; cam.y = v.y + (v.h - L.h * cam.k) / 2; applyCam(true);
 }
 function zoomAt(mx, my, nk) { nk = Math.max(0.15, Math.min(2.5, nk)); cam.x = mx - (mx - cam.x) * nk / cam.k; cam.y = my - (my - cam.y) * nk / cam.k; cam.k = nk; }
@@ -695,7 +715,7 @@ $("#dnMinus").onclick = () => setGen("down", -1); $("#dnPlus").onclick = () => s
 $("#zIn").onclick = () => { const v = viewBox(); zoomAt(v.x + v.w / 2, v.y + v.h / 2, cam.k * 1.25); applyCam(true); };
 $("#zOut").onclick = () => { const v = viewBox(); zoomAt(v.x + v.w / 2, v.y + v.h / 2, cam.k / 1.25); applyCam(true); };
 $("#zFit").onclick = fit;
-$("#homeBtn").onclick = () => { const id = homeId && people.has(homeId) ? homeId : state.focus; if (!id) return; state.focus = id; render(); centerOn(id, true, true); closePanel(); };
+$("#homeBtn").onclick = () => { const id = homeId && people.has(homeId) ? homeId : state.focus; if (!id) return; state.focus = id; closePanel(); render(); fit(); };
 $("#firstBtn").onclick = () => openAdd("first", null);
 addEventListener("hashchange", () => { const id = decodeURIComponent(location.hash.slice(1)); if (people.has(id) && id !== state.focus) { state.focus = id; render(); centerOn(id, true); if (state.sel) openPanel(id); } });
 
@@ -765,7 +785,7 @@ function buildPanel() {
     h("div", { class: "sec" }, h("h3", {}, "How sure are we", h("span", { class: "saved", text: "Saved" })), statusSeg),
     h("div", { class: "sec" }, h("h3", { text: "Name" }), h("div", { class: "grid2" },
       field(p, "given", "Given names"), field(p, "surname", "Surname"),
-      field(p, "birthSurname", "Birth surname", { ph: "Maiden or original name" }), field(p, "aka", "Also known as", { ph: "Nicknames, Hebrew name" }))),
+      field(p, "birthSurname", "Maiden name (n\u00e9e)", { ph: "Surname at birth" }), field(p, "aka", "Also known as", { ph: "Nicknames, Hebrew name" }))),
     h("div", { class: "sec" }, h("h3", { text: "Born" }), h("div", { class: "grid2" },
       field(p, "birthDate", "Date", { ph: "e.g. 12 Jan 1927 or abt 1882" }), field(p, "birthPlace", "Place", { ph: "Town, region, country" }))),
     h("div", { class: "sec" }, h("h3", { text: "Died" }), h("div", { class: "grid2" },
