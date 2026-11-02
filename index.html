@@ -335,7 +335,8 @@ const FB_CONFIG = {
   appId: "1:146496651976:web:11b6ce45d70980f81c9bfd"
 };
 const OWNER = "davidpolonsky@gmail.com";
-const store = { mode: "loading", fdb: null, auth: null, user: null, editors: [], chains: new Map() };
+const NOTIFY_URL = "https://script.google.com/macros/s/AKfycbyNkD1J8C8p22Q8OilUSTHyNQFr9Vz5mH3GwAHQ-K5xKt_M3IIVAfe-dCzcHMC5ZPZFKg/exec";
+const store = { mode: "loading", fdb: null, auth: null, user: null, editors: [], chains: new Map(), members: new Map(), myHome: null, myMember: null };
 function body(p) { const b = { ...p }; delete b.id; b.updatedAt = new Date().toISOString(); return b; }
 let pending = 0;
 function bump(d) { pending += d; if (store.mode === "fb") setSync(pending ? "busy" : "ok", pending ? "Saving" : (state.readOnly ? "View only" : "Saved")); }
@@ -410,6 +411,10 @@ function startListeners() {
     onData();
   }, () => { clearTimeout(timer); banner("The tree could not be loaded. Refresh to try again."); setSync("local", "Offline"); }));
   unsubs.push(store.fdb.doc("meta/settings").onSnapshot(s => { if (s.exists) { homeId = s.data().homeId || null; if (!state.focus && homeId && people.has(homeId)) onData(); } }, () => {}));
+  if (isOwnerUser()) unsubs.push(store.fdb.collection("members").onSnapshot(snap => {
+    store.members = new Map(snap.docs.map(d => [d.id, d.data()]));
+    if (state.sel) { const a = panel.querySelector(".access"); if (a) a.replaceWith(accessBlock(P(state.sel))); }
+  }, () => {}));
 }
 async function onAuth(u) {
   store.user = u;
@@ -417,7 +422,9 @@ async function onAuth(u) {
   if (!u) { state.readOnly = true; authUI(); setSync("local", "Signed out"); gate("signin"); return; }
   const email = (u.email || "").toLowerCase();
   let role = email === OWNER ? "editor" : null;
-  if (!role) { try { const d = await store.fdb.doc("members/" + email).get(); if (d.exists) role = d.data().role === "editor" ? "editor" : "viewer"; } catch {} }
+  store.myMember = null; store.myHome = null; store.members = new Map();
+  if (!role) { try { const d = await store.fdb.doc("members/" + email).get(); if (d.exists) { store.myMember = d.data(); role = d.data().role === "editor" ? "editor" : "viewer"; } } catch {} }
+  try { const pf = await store.fdb.doc("prefs/" + email).get(); if (pf.exists) store.myHome = pf.data().homeId || null; } catch {}
   if (!role) { state.readOnly = true; authUI(); setSync("local", "No access"); gate("denied"); return; }
   gate(null);
   state.readOnly = role !== "editor";
@@ -432,11 +439,11 @@ async function openAccount() {
   const list = h("div", { class: "mlist" });
   const draw = async () => {
     let rows = [];
-    try { const snap = await store.fdb.collection("members").get(); rows = snap.docs.map(d => ({ email: d.id, role: d.data().role || "viewer" })).sort((a, b) => a.email.localeCompare(b.email)); } catch {}
+    try { const snap = await store.fdb.collection("members").get(); rows = snap.docs.map(d => ({ email: d.id, role: d.data().role || "viewer", personId: d.data().personId })).sort((a, b) => a.email.localeCompare(b.email)); } catch {}
     list.replaceChildren(...(rows.length ? rows.map(r => h("div", { class: "mrow" },
-      h("span", { class: "mem", text: r.email }),
+      h("span", { class: "mem", text: r.email + (r.personId && P(r.personId) ? " (" + fullName(P(r.personId)) + ")" : "") }),
       h("span", { class: "muted", text: r.role === "editor" ? "Can edit" : "Can view" }),
-      h("button", { class: "btn small", text: r.role === "editor" ? "Make viewer" : "Make editor", onclick: async () => { await setMember(r.email, r.role === "editor" ? "viewer" : "editor"); draw(); } }),
+      h("button", { class: "btn small", text: r.role === "editor" ? "Make viewer" : "Make editor", onclick: async () => { await setMember(r.email, r.role === "editor" ? "viewer" : "editor", r.personId); draw(); } }),
       h("button", { class: "btn small danger", text: "Remove", onclick: async () => { try { await store.fdb.doc("members/" + r.email).delete(); toast("Removed " + r.email); } catch { toast("Could not remove."); } draw(); } })))
       : [h("div", { class: "muted", text: "No one added yet. Only you can see the tree." })]));
   };
@@ -465,8 +472,50 @@ async function openAccount() {
   modal.classList.add("show");
   if (isOwner) draw();
 }
-async function setMember(email, role) {
-  try { await store.fdb.doc("members/" + email).set({ role, addedAt: new Date().toISOString() }); toast(email + (role === "editor" ? " can edit" : " can view")); }
+function isOwnerUser() { return !!store.user && (store.user.email || "").toLowerCase() === OWNER; }
+async function setMyHome(id) {
+  store.myHome = id;
+  try { await store.fdb.doc("prefs/" + (store.user.email || "").toLowerCase()).set({ homeId: id }); toast(fullName(P(id)) + " is now your home screen"); }
+  catch { toast("Could not save your home screen."); }
+}
+async function notifyAdded(personId, relation) {
+  try {
+    if (!store.user || isOwnerUser() || !/^https:/.test(NOTIFY_URL)) return;
+    const idToken = await store.user.getIdToken();
+    await fetch(NOTIFY_URL, { method: "POST", mode: "no-cors", headers: { "Content-Type": "text/plain" }, body: JSON.stringify({ idToken, personId, relation }) });
+  } catch {}
+}
+function accessBlock(p) {
+  if (!isOwnerUser()) return h("div", { class: "access" });
+  const mine = [...store.members.entries()].filter(([, m]) => m.personId === p.id);
+  const inp = h("input", { id: "acc-email", type: "email", placeholder: (p.given || "their") + "'s Google email", autocomplete: "off" });
+  let role = "editor";
+  const seg = h("div", { class: "seg" });
+  const drawSeg = () => seg.replaceChildren(
+    h("button", { "aria-pressed": String(role === "viewer"), text: "Can view", onclick: () => { role = "viewer"; drawSeg(); } }),
+    h("button", { "aria-pressed": String(role === "editor"), text: "Can contribute", onclick: () => { role = "editor"; drawSeg(); } }));
+  drawSeg();
+  return h("div", { class: "sec access" }, h("h3", { text: "Access to the tree" }),
+    mine.length ? h("div", { class: "mlist" }, mine.map(([em, m]) => h("div", { class: "mrow" },
+      h("span", { class: "mem", text: em }),
+      h("span", { class: "muted", text: m.role === "editor" ? "Can contribute" : "Can view" }),
+      h("button", { class: "btn small", text: m.role === "editor" ? "Make viewer" : "Let contribute", onclick: () => setMember(em, m.role === "editor" ? "viewer" : "editor", p.id) }),
+      h("button", { class: "btn small danger", text: "Remove", onclick: async () => { try { await store.fdb.doc("members/" + em).delete(); toast("Removed " + em); } catch { toast("Could not remove."); } } }))))
+      : h("div", { class: "muted", text: (p.given || "This person") + " can't see the tree yet." }),
+    h("div", { class: "fld", style: "margin-top:10px" }, h("label", { for: "acc-email", text: "Give access" }), inp),
+    h("div", { style: "display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap" }, seg,
+      h("button", { class: "btn primary", text: "Give access", onclick: async () => {
+        const em = inp.value.trim().toLowerCase();
+        if (!/^[^@\s\/]+@[^@\s\/]+\.[^@\s\/]+$/.test(em)) return toast("Enter a full email address.");
+        await setMember(em, role, p.id); inp.value = "";
+      } })),
+    h("div", { class: "muted", style: "margin-top:8px", text: "They sign in at tree.polonsky.us with that Google account. Their home screen starts on " + (p.given || "their card") + "." }));
+}
+async function setMember(email, role, personId) {
+  const prev = store.members.get(email) || {};
+  const data = { role, addedAt: prev.addedAt || new Date().toISOString() };
+  const pid = personId || prev.personId; if (pid) data.personId = pid;
+  try { await store.fdb.doc("members/" + email).set(data); toast(email + (role === "editor" ? " can contribute" : " can view")); }
   catch (e) { toast("Could not save that change."); }
 }
 
@@ -481,6 +530,7 @@ async function init() {
 }
 
 let firstData = true;
+const getHome = () => (store.myHome && people.has(store.myHome)) ? store.myHome : (store.myMember && store.myMember.personId && people.has(store.myMember.personId)) ? store.myMember.personId : homeId;
 function onData() {
   reindex();
   $("#count").textContent = people.size + (people.size === 1 ? " person" : " people");
@@ -488,8 +538,9 @@ function onData() {
   if (!people.size) { world.replaceChildren(); return; }
   const hashId = decodeURIComponent(location.hash.slice(1));
   if (!state.focus || !people.has(state.focus)) {
-    state.focus = people.has(hashId) ? hashId : (homeId && people.has(homeId) ? homeId : [...people.keys()][0]);
-    render(); if (state.focus === homeId) fit(); else centerOn(state.focus, false, true); firstData = false;
+    const hm = getHome();
+    state.focus = people.has(hashId) ? hashId : (hm && people.has(hm) ? hm : [...people.keys()][0]);
+    render(); if (state.focus === hm) fit(); else centerOn(state.focus, false, true); firstData = false;
   } else render();
   if (state.sel && !people.has(state.sel)) closePanel();
   else if (state.sel) refreshPanel();
@@ -715,7 +766,7 @@ $("#dnMinus").onclick = () => setGen("down", -1); $("#dnPlus").onclick = () => s
 $("#zIn").onclick = () => { const v = viewBox(); zoomAt(v.x + v.w / 2, v.y + v.h / 2, cam.k * 1.25); applyCam(true); };
 $("#zOut").onclick = () => { const v = viewBox(); zoomAt(v.x + v.w / 2, v.y + v.h / 2, cam.k / 1.25); applyCam(true); };
 $("#zFit").onclick = fit;
-$("#homeBtn").onclick = () => { const id = homeId && people.has(homeId) ? homeId : state.focus; if (!id) return; state.focus = id; closePanel(); render(); fit(); };
+$("#homeBtn").onclick = () => { const hm = getHome(); const id = hm && people.has(hm) ? hm : state.focus; if (!id) return; state.focus = id; closePanel(); render(); fit(); };
 $("#firstBtn").onclick = () => openAdd("first", null);
 addEventListener("hashchange", () => { const id = decodeURIComponent(location.hash.slice(1)); if (people.has(id) && id !== state.focus) { state.focus = id; render(); centerOn(id, true); if (state.sel) openPanel(id); } });
 
@@ -795,8 +846,10 @@ function buildPanel() {
     h("div", { class: "sec" }, h("h3", { text: "Story" }), h("div", { class: "grid2" },
       field(p, "notes", "Stories and notes", { area: true, full: true, ph: "What the family remembers" }),
       field(p, "sources", "Sources", { area: true, full: true, ph: "Records, recordings, who told us" }))),
+    accessBlock(p),
     h("div", { class: "sec" }, h("h3", { text: "More" }), h("div", { class: "addrow" },
-      h("button", { class: "btn", onclick: async () => { await setHome(p.id); toast(fullName(p) + " is now the home person."); }, disabled: state.readOnly, text: homeId === p.id ? "Home person" : "Make home person" }),
+      h("button", { class: "btn", onclick: async () => { await setMyHome(p.id); buildPanel(); }, text: getHome() === p.id ? "Your home screen" : "Make my home screen" }),
+      isOwnerUser() ? h("button", { class: "btn", onclick: async () => { await setHome(p.id); toast(fullName(p) + " is the default home for everyone."); buildPanel(); }, text: homeId === p.id ? "Default home for everyone" : "Make default for everyone" }) : null,
       h("button", { class: "btn", onclick: copyJson, text: "Copy tree as JSON" }),
       deleteBtn(p)))
   );
@@ -999,6 +1052,7 @@ function openAdd(kind, id) {
       const given = $("#a-given").value.trim(), surname = $("#a-surname").value.trim();
       if (!given && !surname) { $("#a-given").focus(); return toast("Add at least a first name or surname."); }
       target = blank(newId(given + " " + surname));
+      target.createdBy = (store.user && store.user.email || "").toLowerCase(); target.createdAt = new Date().toISOString();
       Object.assign(target, { given, surname, birthDate: $("#a-bdate").value.trim(), birthPlace: $("#a-bplace").value.trim() });
       people.set(target.id, target);
     } else {
@@ -1034,6 +1088,7 @@ function openAdd(kind, id) {
     if (state.sel) refreshPanel();
     await putAll(changed);
     if (kind === "first") { if (!homeId) await setHome(target.id); select(target.id); }
+    if (tab === "new") notifyAdded(target.id, kind === "first" ? "" : kind + " of " + fullName(P(id)));
     toast(fullName(target) + (tab === "new" ? " added" : " linked"));
   };
   draw();
