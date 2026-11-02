@@ -115,8 +115,8 @@ header{position:fixed;top:0;left:0;right:0;z-index:30;display:flex;align-items:c
 
 /* Panel */
 #panel{position:fixed;z-index:40;background:var(--surface);box-shadow:var(--shadow);display:flex;flex-direction:column;transition:transform .3s cubic-bezier(.2,.7,.2,1)}
-@media (min-width:761px){#panel{top:59px;right:0;bottom:0;width:400px;border-left:1px solid var(--grid);transform:translateX(105%)}#panel.open{transform:none}}
-@media (max-width:760px){#panel{left:0;right:0;bottom:0;height:60%;border-radius:18px 18px 0 0;border-top:1px solid var(--grid);transform:translateY(105%)}#panel.open{transform:none}
+@media (min-width:761px){#panel{top:var(--hh,59px);right:0;bottom:0;width:400px;border-left:1px solid var(--grid);transform:translateX(105%)}#panel.open{transform:none}}
+@media (max-width:760px){#panel{left:0;right:0;bottom:0;height:calc(100% - var(--hh,60px));border-radius:18px 18px 0 0;border-top:1px solid var(--grid);transform:translateY(105%)}#panel.open{transform:translateY(var(--sheet-off,0px))}#panel.dragging{transition:none}
   .legend{display:none}.brand small{display:none}.brand b{font-size:21px}.hbtn .lbl{display:none}.sync .lbl{display:none}}
 .p-head{display:flex;gap:14px;align-items:center;padding:18px 18px 12px;border-bottom:1px solid var(--grid)}
 .p-head .big{width:76px;height:76px;border-radius:50%;flex:none;background:color-mix(in srgb,var(--accent) 14%,var(--surface));display:grid;place-items:center;overflow:hidden;font-family:var(--font-display);font-size:32px;color:var(--accent);position:relative}
@@ -175,7 +175,7 @@ header{position:fixed;top:0;left:0;right:0;z-index:30;display:flex;align-items:c
 /* Toast, banners, empty */
 #toast{position:fixed;left:50%;bottom:76px;transform:translateX(-50%) translateY(20px);opacity:0;z-index:70;background:var(--ink);color:var(--bg);padding:10px 14px;border-radius:10px;font-size:13px;transition:all .25s;pointer-events:none;max-width:90%}
 #toast.show{opacity:1;transform:translateX(-50%)}
-.banner{position:fixed;top:66px;left:50%;transform:translateX(-50%);z-index:25;background:var(--surface);border:1px solid var(--grid);border-radius:10px;padding:8px 12px;font-size:13px;color:var(--muted);box-shadow:var(--shadow);display:none;max-width:92%}
+.banner{position:fixed;top:calc(var(--hh,59px) + 7px);left:50%;transform:translateX(-50%);z-index:25;background:var(--surface);border:1px solid var(--grid);border-radius:10px;padding:8px 12px;font-size:13px;color:var(--muted);box-shadow:var(--shadow);display:none;max-width:92%}
 .banner.show{display:block}
 .empty{position:fixed;inset:0;display:none;align-items:center;justify-content:center;flex-direction:column;gap:12px;text-align:center;padding:24px}
 .empty.show{display:flex}
@@ -200,14 +200,13 @@ header{position:fixed;top:0;left:0;right:0;z-index:30;display:flex;align-items:c
 .chip .ust{font-size:11px;color:var(--muted);padding-right:8px}
 @media (max-width:760px){
   .fld input,.fld textarea,.search input,.dlg input{font-size:16px}
-  #panel.typing{height:calc(100% - 59px)}
 }
 .pill .vbtn{display:flex;align-items:center;gap:6px;padding:0 10px;font-size:13px;font-weight:500}
 .pill .vbtn[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink)}
 body.allview .pill.gen{display:none}
 @media (prefers-reduced-motion: reduce){*{transition:none!important}}
 a.btn{text-decoration:none;color:var(--ink);display:inline-flex;align-items:center}
-.yaxis{position:fixed;left:0;top:61px;bottom:0;width:92px;z-index:10;pointer-events:none;background:linear-gradient(90deg,color-mix(in srgb,var(--bg) 92%,transparent) 60%,transparent);display:none}
+.yaxis{position:fixed;left:0;top:calc(var(--hh,59px) + 2px);bottom:0;width:92px;z-index:10;pointer-events:none;background:linear-gradient(90deg,color-mix(in srgb,var(--bg) 92%,transparent) 60%,transparent);display:none}
 .yaxis.show{display:block}
 .yaxis .yh{position:absolute;left:14px;top:10px;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
 .yaxis .yl{position:absolute;left:14px;transform:translateY(-50%);font-family:var(--font-display);font-size:21px;line-height:1;color:var(--muted);white-space:nowrap}
@@ -220,6 +219,95 @@ a.btn{text-decoration:none;color:var(--ink);display:inline-flex;align-items:cent
 .hint{font-size:12.5px;color:var(--muted);line-height:1.4;margin:6px 0 0 26px}
 .help ul{padding-left:18px;margin:10px 0}
 .help li{margin:7px 0;font-size:14px;line-height:1.45}
+
+/* Header menu (phones) */
+#menuBtn{display:none}
+.menu{position:fixed;right:12px;top:calc(var(--hh,59px) - 4px);z-index:45;background:var(--surface);border:1px solid var(--grid);border-radius:12px;box-shadow:var(--shadow);padding:6px;min-width:230px;display:none;flex-direction:column}
+.menu.show{display:flex}
+.menu .mi{display:flex;align-items:center;gap:10px;border:0;background:none;text-align:left;padding:0 12px;min-height:44px;border-radius:8px;font-size:15px}
+.menu .mi:hover{background:var(--bg)}
+.menu .mi svg{width:18px;height:18px;color:var(--muted)}
+.menu .mstat{font-size:12.5px;color:var(--muted);padding:6px 12px 8px;border-bottom:1px solid var(--grid);margin-bottom:4px;display:flex;align-items:center;gap:8px}
+.menu .mstat i{width:8px;height:8px;border-radius:50%;background:var(--muted);display:inline-block}
+.menu .mstat.ok i{background:var(--ok)} .menu .mstat.busy i{background:var(--story)} .menu .mstat.local i{background:var(--research)}
+
+/* View switch and options */
+.pill.views{padding:0 4px;gap:2px}
+.pill .vbtn{white-space:nowrap}
+.pill.views .vbtn svg{width:15px;height:15px}
+.pill.zoom .zfit{display:grid}
+#optBtn{display:none}
+body.allview #optBtn,body.mapview #optBtn,body.mapview .pill.gen,body.mapview .pill.zoom{display:none!important}
+body.mapview .legend,body.mapview .yaxis{display:none!important}
+.optrow{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--grid)}
+.optrow:last-of-type{border-bottom:0}
+.optrow .st{display:flex;align-items:center;gap:6px}
+.optrow .st button{width:44px;height:44px;border-radius:10px;border:1px solid var(--grid);background:var(--bg);font-size:20px}
+.optrow output{min-width:26px;text-align:center;font-weight:600;font-size:17px;font-variant-numeric:tabular-nums}
+
+/* Bottom sheet handle */
+.grab{display:none}
+@media (max-width:760px){
+  header{padding:8px 12px;gap:8px}
+  .brand{display:none}
+  .search{margin-left:0;max-width:none}
+  .search input{height:44px;font-size:16px}
+  .search svg{top:14px}
+  .results{top:50px;max-height:60vh}
+  .results button{min-height:48px}
+  .hbtn{height:44px;min-width:44px;padding:0 11px}
+  #helpBtn,#authBtn,.sync{display:none}
+  #menuBtn{display:inline-flex}
+  .ctl{left:10px;right:10px;bottom:12px;flex-wrap:nowrap;gap:6px}
+  .pill{height:48px}
+  .pill button{height:40px;min-width:44px}
+  .pill .vbtn{padding:0 9px;gap:5px;white-space:nowrap}
+  .pill.gen,.pill.zoom .zpm{display:none}
+  .pill.zoom{padding:0 4px}
+  #optBtn{display:flex;width:48px;justify-content:center;padding:0}
+  .p-head .x{width:44px;height:44px}
+  .grab{display:block;flex:none;height:22px;cursor:grab;touch-action:none;position:relative}
+  .grab::after{content:"";position:absolute;left:50%;top:9px;width:40px;height:5px;margin-left:-20px;border-radius:3px;background:var(--grid)}
+  .p-head{padding-top:4px;touch-action:none}
+  #toast{bottom:84px}
+}
+
+/* Map view */
+#mapview{position:fixed;left:0;right:0;top:var(--hh,59px);bottom:0;z-index:15;display:none;background:var(--bg)}
+body.mapview #mapview{display:block}
+#map{position:absolute;inset:0}
+.mapctl{position:absolute;left:16px;top:12px;z-index:500;background:var(--surface);border:1px solid var(--grid);border-radius:12px;box-shadow:var(--shadow);padding:10px 12px;width:min(420px,calc(100% - 32px));display:flex;flex-direction:column;gap:8px}
+.mapctl .chips{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+.mapctl .chips::-webkit-scrollbar{display:none}
+.mapctl .chip{flex:none}
+.mapctl .chip button{white-space:nowrap}
+.mapctl .chip.on{background:var(--accent);border-color:var(--accent)}
+.mapctl .chip.on button{color:var(--accent-ink)}
+.mapctl .yr{display:flex;align-items:center;gap:10px;font-size:13px;color:var(--muted)}
+.mapctl .yr input{flex:1;accent-color:var(--accent)}
+.mapctl .yr b{color:var(--ink);font-variant-numeric:tabular-nums;min-width:62px;text-align:right}
+.mapctl .mkey{display:flex;gap:12px;font-size:12px;color:var(--muted);flex-wrap:wrap;align-items:center}
+.mapctl .mkey span{display:flex;align-items:center;gap:5px}
+.mapctl .mkey i{width:10px;height:10px;border-radius:50%;display:inline-block}
+.mapctl .mstatus{margin-left:auto;font-style:italic}
+.k-birth{background:var(--accent)} .k-death{background:#8a8f8c} .k-lives{background:var(--brass)}
+.mpin{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;box-shadow:0 1px 4px rgba(0,0,0,.35)}
+.mpin span{width:18px;height:18px;border-radius:50%;background:var(--surface);color:var(--ink);display:grid;place-items:center;font:600 11px/1 var(--font-body)}
+.leaflet-container{font-family:var(--font-body);background:var(--bg)}
+.leaflet-popup-content{margin:10px 12px;min-width:200px}
+.mpop .mrow2{display:flex;align-items:center;gap:8px;width:100%;border:0;background:none;text-align:left;padding:6px 4px;border-radius:8px;min-height:44px;color:var(--ink)}
+.mpop .mrow2:hover{background:var(--bg)}
+.mpop .ph{width:30px;height:30px;font-size:13px}
+.mpop .t{font-weight:600;font-size:14px}
+.mpop .w{font-size:12px;color:var(--muted)}
+.mpop h4{margin:0 0 4px;font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.geo{font-size:12px;color:var(--muted);margin-top:4px;display:flex;gap:6px;align-items:center;flex-wrap:wrap;line-height:1.3}
+.geo button{border:0;background:none;color:var(--accent);text-decoration:underline;padding:4px 2px;font-size:12px}
+.pmap{height:240px;border-radius:10px;border:1px solid var(--grid);margin-top:10px}
+@media (max-width:760px){
+  .mapctl{left:10px;right:10px;top:10px;width:auto;padding:8px 10px}
+  body.mapview .leaflet-bottom{bottom:66px}
+}
 </style>
 </head>
 <body>
@@ -237,12 +325,19 @@ a.btn{text-decoration:none;color:var(--ink);display:inline-flex;align-items:cent
   <button class="hbtn" id="helpBtn" title="How the tree works" aria-label="How the tree works"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6v.6"/><circle cx="12" cy="17.2" r=".6" fill="currentColor"/></svg></button>
   <button class="hbtn" id="authBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg><span class="lbl">Sign in to edit</span></button>
   <div class="sync" id="sync"><i></i><span class="lbl">Connecting</span></div>
+  <button class="hbtn" id="menuBtn" aria-label="Menu" aria-haspopup="true" aria-expanded="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
 </header>
 
+<div class="menu" id="menu" role="menu"></div>
 <div class="banner" id="banner"></div>
+<div id="mapview"><div id="map"></div><div class="mapctl" id="mapctl"></div></div>
 
 <div class="ctl">
-  <div class="pill"><button id="viewBtn" class="vbtn" aria-pressed="false" title="See the whole family at once"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="5" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="8.5" y="16" width="7" height="5" rx="1"/><path d="M6.5 8v4h11V8M12 12v4"/></svg><span class="lbl">Whole tree</span></button></div>
+  <div class="pill views" role="group" aria-label="View">
+    <button class="vbtn" data-v="focus" aria-pressed="true" title="One person and their close family"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="3.5"/><path d="M5 20c1.2-3.5 3.8-5 7-5s5.8 1.5 7 5"/></svg><span class="lbl">Focus</span></button>
+    <button class="vbtn" data-v="all" aria-pressed="false" title="See the whole family at once"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="5" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="8.5" y="16" width="7" height="5" rx="1"/><path d="M6.5 8v4h11V8M12 12v4"/></svg><span class="lbl">Whole tree</span></button>
+    <button class="vbtn" data-v="map" aria-pressed="false" title="Where the family was born, died and lives"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11z"/><circle cx="12" cy="10" r="2.3"/></svg><span class="lbl">Map</span></button>
+  </div>
   <div class="pill gen" aria-label="Generations above">
     <label>Up</label>
     <button id="upMinus" aria-label="Show fewer generations above">−</button><output id="upVal">5</output><button id="upPlus" aria-label="Show more generations above">+</button>
@@ -251,11 +346,12 @@ a.btn{text-decoration:none;color:var(--ink);display:inline-flex;align-items:cent
     <label>Down</label>
     <button id="dnMinus" aria-label="Show fewer generations below">−</button><output id="dnVal">2</output><button id="dnPlus" aria-label="Show more generations below">+</button>
   </div>
-  <div class="pill">
-    <button id="zOut" aria-label="Zoom out"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14"/></svg></button>
-    <button id="zFit" aria-label="Fit tree to screen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
-    <button id="zIn" aria-label="Zoom in"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5v14"/></svg></button>
+  <div class="pill zoom">
+    <button id="zOut" class="zpm" aria-label="Zoom out"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14"/></svg></button>
+    <button id="zFit" class="zfit" aria-label="Fit tree to screen" title="Fit to screen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+    <button id="zIn" class="zpm" aria-label="Zoom in"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5v14"/></svg></button>
   </div>
+  <button class="pill" id="optBtn" aria-label="View options" title="View options"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg></button>
 </div>
 
 <div class="legend" aria-label="Legend">
@@ -280,9 +376,9 @@ a.btn{text-decoration:none;color:var(--ink);display:inline-flex;align-items:cent
 /* ---------- constants & state ---------- */
 const U = 212, CW = 184, CH = 100, RH = 176, PAD = 120;
 const STATUS = { confirmed: "Documented", story: "Family story", research: "Needs research" };
-const FIELDS = ["given","surname","birthSurname","aka","birthDate","birthPlace","deathDate","deathPlace","notes","sources"];
+const FIELDS = ["given","surname","birthSurname","aka","birthDate","birthPlace","deathDate","deathPlace","livesIn","notes","sources"];
 // Details that move to the private/<id> doc when a living person's details are private.
-const PRIV = ["aka","birthDate","birthPlace","deathDate","deathPlace","notes","sources","photoData","photoId"];
+const PRIV = ["aka","birthDate","birthPlace","deathDate","deathPlace","livesIn","geo","notes","sources","photoData","photoId"];
 const people = new Map();
 let homeId = null;
 const state = { focus: null, sel: null, up: 5, down: 2, readOnly: true, view: "focus" };
@@ -304,7 +400,7 @@ function h(tag, attrs, ...kids) {
 }
 const toastEl = $("#toast"); let toastT;
 function toast(msg) { toastEl.textContent = msg; toastEl.classList.add("show"); clearTimeout(toastT); toastT = setTimeout(() => toastEl.classList.remove("show"), 2600); }
-function setSync(cls, label) { const s = $("#sync"); s.className = "sync " + cls; s.querySelector(".lbl").textContent = label; }
+function setSync(cls, label) { const s = $("#sync"); s.className = "sync " + cls; s.querySelector(".lbl").textContent = label; if ($("#menu").classList.contains("show")) drawMenu(); }
 function banner(msg) { const b = $("#banner"); b.textContent = msg || ""; b.classList.toggle("show", !!msg); }
 
 /* ---------- person helpers ---------- */
@@ -706,6 +802,7 @@ function onData() {
     state.focus = people.has(hashId) ? hashId : (hm && people.has(hm) ? hm : [...people.keys()][0]);
     render(); if (state.focus === hm) fit(); else centerOn(state.focus, false, true); firstData = false;
   } else render();
+  if (state.view === "map") { drawMapSoon(); return; }
   if (state.view === "all") return;
   if (state.sel && !people.has(state.sel)) closePanel();
   else if (state.sel) refreshPanel();
@@ -932,8 +1029,10 @@ function layoutAll() {
 }
 function setView(v) {
   state.view = v;
-  const b = $("#viewBtn"); if (b) { b.querySelector(".lbl").textContent = v === "all" ? "Focus view" : "Whole tree"; b.setAttribute("aria-pressed", String(v === "all")); }
+  document.querySelectorAll(".pill.views .vbtn").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.v === v)));
   document.body.classList.toggle("allview", v === "all");
+  document.body.classList.toggle("mapview", v === "map");
+  if (v === "map") { closePanelQuiet(); openMap(); return; }
   render(); if (v === "all") { closePanelQuiet(); fit(); } else centerOn(state.focus, true, true);
 }
 function closePanelQuiet() { state.sel = null; panel.classList.remove("open"); }
@@ -998,7 +1097,7 @@ function addBtn(pos, label, fn) {
   return h("button", { class: "add " + pos, "aria-label": label, title: label, onclick: e => { e.stopPropagation(); fn(); } }, h("span", { text: "+" }));
 }
 function select(id) {
-  if (state.view === "all") { state.focus = id; setView("focus"); openPanel(id); try { location.hash = id; } catch {} return; }
+  if (state.view !== "focus") { state.focus = id; setView("focus"); openPanel(id); try { location.hash = id; } catch {} return; }
   const changed = state.focus !== id;
   state.focus = id;
   if (location.hash.slice(1) !== id) { try { location.hash = id; } catch {} }
@@ -1011,6 +1110,11 @@ function select(id) {
 /* ---------- camera ---------- */
 const cam = { x: 0, y: 0, k: 1 };
 const panelW = () => (panel.classList.contains("open") && innerWidth > 760 ? 400 : 0);
+const hdr = $("header");
+let HH = 59;
+function measureHeader() { HH = hdr.offsetHeight || 59; document.documentElement.style.setProperty("--hh", HH + "px"); }
+measureHeader();
+const isPhone = () => innerWidth <= 760;
 function applyCam(anim) { world.style.transition = anim ? "transform .5s cubic-bezier(.2,.7,.2,1)" : "none"; world.style.transform = `translate(${cam.x}px,${cam.y}px) scale(${cam.k})`; placeYAxis(anim); }
 // Birth decades pinned to the left edge. Each row's label comes from the known birth years
 // of the people drawn in that row, and follows the row as you pan and zoom.
@@ -1031,12 +1135,12 @@ function buildYAxis() {
 function placeYAxis(anim) {
   yaxis.classList.toggle("anim", !!anim);
   for (const r of yRows) {
-    const top = cam.y + r.y * cam.k - 61;
+    const top = cam.y + r.y * cam.k - HH - 2;
     r.el.style.top = top + "px";
     r.el.style.opacity = top < 34 || top > innerHeight - 70 ? "0" : "1";
   }
 }
-function viewBox() { const top = 60, bottom = innerWidth <= 760 && panel.classList.contains("open") ? innerHeight * 0.6 : 64; return { x: 0, y: top, w: innerWidth - panelW(), h: innerHeight - top - bottom }; }
+function viewBox() { const top = HH + 1, bottom = isPhone() && panel.classList.contains("open") ? (sheet === "full" ? innerHeight - HH : PEEK) : 72; return { x: 0, y: top, w: innerWidth - panelW(), h: innerHeight - top - bottom }; }
 function centerOn(id, anim, fitScale) {
   if (!L) return;
   const n = L.nodes.find(n => n.id === id && n.role === "focus") || L.nodes.find(n => n.id === id);
@@ -1089,7 +1193,7 @@ const endPtr = e => {
   start = { cam: { ...cam }, pts: new Map([...pts].map(([k, v]) => [k, { ...v }])) };
 };
 addEventListener("pointerup", endPtr); addEventListener("pointercancel", endPtr);
-addEventListener("resize", () => { if (state.focus) centerOn(state.focus, false); });
+addEventListener("resize", () => { measureHeader(); if (panel.classList.contains("open")) setSheet(sheet, false); if (state.focus && state.view !== "map") centerOn(state.focus, false); if (mapObj) mapObj.invalidateSize(); });
 
 /* ---------- controls ---------- */
 function setGen(k, d) {
@@ -1105,7 +1209,30 @@ $("#zIn").onclick = () => { const v = viewBox(); zoomAt(v.x + v.w / 2, v.y + v.h
 $("#zOut").onclick = () => { const v = viewBox(); zoomAt(v.x + v.w / 2, v.y + v.h / 2, cam.k / 1.25); applyCam(true); };
 $("#zFit").onclick = fit;
 $("#homeBtn").onclick = () => { const hm = getHome(); const id = hm && people.has(hm) ? hm : state.focus; if (!id) return; state.focus = id; state.view = "focus"; setView("focus"); closePanel(); render(); fit(); };
-$("#viewBtn").onclick = () => setView(state.view === "all" ? "focus" : "all");
+document.querySelectorAll(".pill.views .vbtn").forEach(b => b.onclick = () => { if (b.dataset.v !== state.view) setView(b.dataset.v); });
+$("#optBtn").onclick = openOptions;
+function openOptions() {
+  const row = (lab, k) => { const out = h("output", { text: state[k] }); return h("div", { class: "optrow" }, h("div", { text: lab }), h("div", { class: "st" },
+    h("button", { "aria-label": "Fewer", text: "\u2212", onclick: () => { setGen(k, -1); out.textContent = state[k]; } }), out,
+    h("button", { "aria-label": "More", text: "+", onclick: () => { setGen(k, 1); out.textContent = state[k]; } }))); };
+  dlg.replaceChildren(h("h2", { text: "View options" }), h("div", { class: "muted", text: "How many generations to show around the person in focus." }),
+    row("Generations above", "up"), row("Generations below", "down"),
+    h("div", { class: "acts" }, h("button", { class: "btn primary", text: "Done", onclick: closeModal })));
+  modal.classList.add("show");
+}
+// Phone menu: help, account and save status in one place.
+const menu = $("#menu"), menuBtn = $("#menuBtn");
+function drawMenu() {
+  const sy = $("#sync"), au = $("#authBtn");
+  const ico = d => { const s = document.createElement("span"); s.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' + d + "</svg>"; return s.firstChild; };
+  menu.replaceChildren(
+    h("div", { class: "mstat " + sy.className.replace("sync", "").trim() }, h("i"), [$("#count").textContent, sy.querySelector(".lbl").textContent].filter(Boolean).join(" \u00b7 ")),
+    h("button", { class: "mi", role: "menuitem", onclick: () => { closeMenu(); au.click(); } }, ico('<circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/>'), store.user ? "Account (" + store.user.email + ")" : "Sign in to edit"),
+    h("button", { class: "mi", role: "menuitem", onclick: () => { closeMenu(); $("#helpBtn").click(); } }, ico('<circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6v.6"/>'), "How the tree works"));
+}
+function closeMenu() { menu.classList.remove("show"); menuBtn.setAttribute("aria-expanded", "false"); }
+menuBtn.onclick = e => { e.stopPropagation(); if (menu.classList.contains("show")) return closeMenu(); drawMenu(); menu.classList.add("show"); menuBtn.setAttribute("aria-expanded", "true"); };
+document.addEventListener("click", e => { if (!e.target.closest("#menu,#menuBtn")) closeMenu(); });
 $("#firstBtn").onclick = () => openAdd("first", null);
 addEventListener("hashchange", () => { const id = decodeURIComponent(location.hash.slice(1)); if (people.has(id) && id !== state.focus) { state.focus = id; render(); centerOn(id, true); if (state.sel) openPanel(id); } });
 
@@ -1113,7 +1240,7 @@ addEventListener("hashchange", () => { const id = decodeURIComponent(location.ha
 const q = $("#q"), results = $("#results");
 function matches(term) {
   term = term.trim().toLowerCase(); if (!term) return [];
-  return [...people.values()].filter(p => [p.given, p.surname, p.birthSurname, p.aka, p.birthPlace].join(" ").toLowerCase().includes(term))
+  return [...people.values()].filter(p => [p.given, p.surname, p.birthSurname, p.aka, p.birthPlace, p.livesIn].join(" ").toLowerCase().includes(term))
     .sort((a, b) => fullName(a).localeCompare(fullName(b))).slice(0, 12);
 }
 q.addEventListener("input", () => {
@@ -1127,7 +1254,43 @@ q.addEventListener("keydown", e => { if (e.key === "Enter") { const m = matches(
 document.addEventListener("click", e => { if (!e.target.closest(".search")) results.classList.remove("show"); });
 
 /* ---------- panel ---------- */
-function openPanel(id) { state.sel = id; panel.classList.add("open"); buildPanel(); }
+const PEEK = 236;
+let sheet = "peek";
+function setSheet(s, anim = true) {
+  sheet = s;
+  if (!anim) panel.classList.add("dragging");
+  panel.style.setProperty("--sheet-off", s === "full" ? "0px" : Math.max(0, panel.offsetHeight - PEEK) + "px");
+  if (!anim) { void panel.offsetHeight; panel.classList.remove("dragging"); }
+}
+function openPanel(id) { const was = panel.classList.contains("open"); state.sel = id; if (!was) setSheet("peek", false); panel.classList.add("open"); buildPanel(); }
+// Drag the sheet's handle or header to make it taller, shorter, or close it.
+(() => {
+  let drag = null;
+  panel.addEventListener("pointerdown", e => {
+    if (!isPhone() || !e.target.closest(".grab,.p-head") || e.target.closest("button,input,textarea,a")) return;
+    const off = parseFloat(getComputedStyle(panel).getPropertyValue("--sheet-off")) || 0;
+    drag = { id: e.pointerId, y: e.clientY, off, moved: false };
+    try { panel.setPointerCapture(e.pointerId); } catch {}
+  });
+  panel.addEventListener("pointermove", e => {
+    if (!drag || e.pointerId !== drag.id) return;
+    const dy = e.clientY - drag.y;
+    if (!drag.moved && Math.abs(dy) < 6) return;
+    drag.moved = true; panel.classList.add("dragging");
+    panel.style.setProperty("--sheet-off", Math.max(0, drag.off + dy) + "px");
+  });
+  const end = e => {
+    if (!drag || e.pointerId !== drag.id) return;
+    const d = drag; drag = null; panel.classList.remove("dragging");
+    const H = panel.offsetHeight, peekOff = Math.max(0, H - PEEK);
+    if (!d.moved) { if (e.target.closest(".grab")) setSheet(sheet === "full" ? "peek" : "full"); return; }
+    const off = parseFloat(panel.style.getPropertyValue("--sheet-off")) || 0;
+    if (off > peekOff + 70) { closePanel(); return; }
+    setSheet(off < peekOff / 2 ? "full" : "peek");
+    if (state.focus && L && state.view === "focus") centerOn(state.focus, true);
+  };
+  panel.addEventListener("pointerup", end); panel.addEventListener("pointercancel", end);
+})();
 function closePanel() { const was = panel.classList.contains("open"); state.sel = null; panel.classList.remove("open"); if (was && state.focus && L) centerOn(state.focus, true); }
 const saveTimers = new Map(), pendingEdits = new Map();
 function scheduleSave(id) {
@@ -1143,11 +1306,11 @@ function field(p, key, label, opts = {}) {
   const input = opts.area ? h("textarea", { id, placeholder: opts.ph || "" }) : h("input", { id, type: "text", placeholder: opts.ph || "", autocomplete: "off" });
   input.value = p[key] || "";
   input.disabled = !canEditCard(p);
-  input.addEventListener("input", () => { const cur = P(p.id); if (!cur) return; cur[key] = input.value; pendingEdits.set(p.id, { ...(pendingEdits.get(p.id) || {}), [key]: input.value }); scheduleSave(p.id); softRender(); if (key === "given" || key === "surname" || key.startsWith("birth") || key.startsWith("death")) updateHead(); });
-  return h("div", { class: "fld" + (opts.full ? " full" : "") }, h("label", { for: id, text: label }), input);
+  input.addEventListener("input", () => { const cur = P(p.id); if (!cur) return; cur[key] = input.value; pendingEdits.set(p.id, { ...(pendingEdits.get(p.id) || {}), [key]: input.value }); scheduleSave(p.id); softRender(); if (key === "given" || key === "surname" || key.startsWith("birth") || key.startsWith("death")) updateHead(); if (PLACE_KIND[key]) { updateGeoLines(); clearTimeout(geoTimers.get(key)); geoTimers.set(key, setTimeout(() => autoGeo(p.id, PLACE_KIND[key]).then(updateGeoLines), 1500)); } });
+  return h("div", { class: "fld" + (opts.full ? " full" : "") }, h("label", { for: id, text: label }), input, PLACE_KIND[key] ? geoLine(p, PLACE_KIND[key]) : null);
 }
 function focusField(k) { const el = panel.querySelector("#f-" + k); if (!el) return; el.focus(); setTimeout(() => el.scrollIntoView({ block: "center", behavior: "smooth" }), 250); }
-panel.addEventListener("focusin", e => { if (e.target.matches("input:not([type=checkbox]),textarea") && innerWidth <= 760) { panel.classList.add("typing"); setTimeout(() => e.target.scrollIntoView({ block: "center", behavior: "smooth" }), 300); } });
+panel.addEventListener("focusin", e => { if (e.target.matches("input:not([type=checkbox]),textarea") && innerWidth <= 760) { panel.classList.add("typing"); setSheet("full"); setTimeout(() => e.target.scrollIntoView({ block: "center", behavior: "smooth" }), 300); } });
 panel.addEventListener("focusout", () => setTimeout(() => { if (!panel.contains(document.activeElement)) panel.classList.remove("typing"); }, 150));
 function updateHead() {
   const p = P(state.sel); if (!p) return;
@@ -1171,7 +1334,7 @@ function buildPanel() {
     Object.entries(STATUS).map(([k, label]) => h("button", { "aria-pressed": String((p.status || "research") === k), disabled: !ed, onclick: async () => { const cur = P(p.id); cur.status = k; render(); buildPanel(); await put(cur); flashSaved(); } }, h("i", { class: "dot " + k }), label)));
   const living = h("input", { type: "checkbox", id: "f-living", disabled: !ed || (p.private && p.living) });
   living.checked = !!p.living;
-  living.addEventListener("change", () => { const cur = P(p.id); cur.living = living.checked; scheduleSave(p.id); });
+  living.addEventListener("change", () => { const cur = P(p.id); cur.living = living.checked; scheduleSave(p.id); buildPanel(); });
   const bodyEl = h("div", { class: "p-body" },
     ownerNote(p),
     h("div", { class: "sec" }, h("h3", {}, "How sure are we", h("span", { class: "saved", text: "Saved" })), statusSeg),
@@ -1183,7 +1346,8 @@ function buildPanel() {
       field(p, "birthDate", "Date", { ph: "e.g. 12 Jan 1927 or abt 1882" }), field(p, "birthPlace", "Place", { ph: "Town, region, country" }))),
     h("div", { class: "sec" }, h("h3", { text: "Died" }), h("div", { class: "grid2" },
       field(p, "deathDate", "Date", { ph: "Leave blank if unknown" }), field(p, "deathPlace", "Place")),
-      h("label", { class: "chk", for: "f-living" }, living, "Living"))],
+      h("label", { class: "chk", for: "f-living" }, living, "Living")),
+    p.living ? h("div", { class: "sec" }, h("h3", { text: "Lives now" }), h("div", { class: "grid2" }, field(p, "livesIn", "Town or city", { full: true, ph: "e.g. Palm Beach Gardens, Florida" }))) : null],
     privacyBlock(p),
     h("div", { class: "sec" }, h("h3", { text: "Family" }), familyBlock(p)),
     hid ? null : h("div", { class: "sec" }, h("h3", { text: "Story" }), h("div", { class: "grid2" },
@@ -1196,8 +1360,9 @@ function buildPanel() {
       h("button", { class: "btn", onclick: copyJson, text: "Copy tree as JSON" }),
       deleteBtn(p)))
   );
-  panel.replaceChildren(head, bodyEl);
+  panel.replaceChildren(h("div", { class: "grab", "aria-hidden": "true" }), head, bodyEl);
   panel.dataset.hid = hid ? "1" : "0"; panel.dataset.priv = p.private ? "1" : "0"; panel.dataset.ed = ed ? "1" : "0";
+  updateGeoLines();
 }
 function lockSvgInline() { const s = lockSvg(); s.setAttribute("style", "width:13px;height:13px;vertical-align:-2px"); return s; }
 function ownerNote(p) {
@@ -1256,7 +1421,7 @@ function refreshPanel() {
   const p = P(state.sel); if (!p) return;
   if (panel.dataset.hid !== (hidden(p) ? "1" : "0") || panel.dataset.priv !== (p.private ? "1" : "0") || panel.dataset.ed !== (canEditCard(p) ? "1" : "0")) return buildPanel();
   for (const k of FIELDS) { const el = panel.querySelector("#f-" + k); if (el && el !== document.activeElement && el.value !== (p[k] || "")) el.value = p[k] || ""; }
-  updateHead();
+  updateHead(); updateGeoLines();
   const fam = panel.querySelector(".fam"); if (fam) fam.replaceWith(familyBlock(p));
 }
 function photoControls(p) {
@@ -1362,6 +1527,258 @@ async function removePerson(id) {
 async function copyJson() {
   const data = JSON.stringify({ homeId, people: [...people.values()] }, null, 2);
   try { await navigator.clipboard.writeText(data); toast("Copied the whole tree"); } catch { toast("Copy was blocked by this browser"); }
+}
+
+/* ---------- places on the map ---------- */
+// Place names are looked up once with OpenStreetMap's Nominatim service (at most one request a second)
+// and saved on the card as geo.birth / geo.death / geo.lives, so each place is only looked up again if its text changes.
+const PLACE_KIND = { birthPlace: "birth", deathPlace: "death", livesIn: "lives" };
+const KIND_KEY = { birth: "birthPlace", death: "deathPlace", lives: "livesIn" };
+const KIND_LABEL = { birth: "Born", death: "Died", lives: "Lives" };
+const KIND_PLACE = { birth: "Birth place", death: "Place of death", lives: "Home" };
+const geoTimers = new Map();
+let geoCache = {};
+try { geoCache = JSON.parse(localStorage.getItem("ft.geo") || "{}"); } catch {}
+let geoChain = Promise.resolve(), geoLast = 0;
+function shortPlace(r) {
+  const a = r.address || {}, parts = String(r.display_name || "").split(",").map(s => s.trim()).filter(Boolean);
+  const town = a.city || a.town || a.village || a.hamlet || a.municipality || a.county || a.state || parts[0] || "";
+  const region = (a.country_code === "us" && a.state && a.state !== town) ? a.state : "";
+  return [town, region, a.country || parts[parts.length - 1]].filter((x, i, arr) => x && arr.indexOf(x) === i).join(", ");
+}
+function geocodeSearch(text, limit = 1) {
+  const key = limit + "|" + text.trim().toLowerCase();
+  if (geoCache[key]) return Promise.resolve(geoCache[key]);
+  const job = geoChain.then(async () => {
+    const wait = geoLast + 1200 - Date.now();
+    if (wait > 0) await new Promise(r => setTimeout(r, wait));
+    geoLast = Date.now();
+    const r = await fetch("https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&accept-language=en&limit=" + limit + "&q=" + encodeURIComponent(text.trim()));
+    if (!r.ok) throw new Error("lookup " + r.status);
+    const out = (await r.json()).map(x => ({ lat: +(+x.lat).toFixed(4), lng: +(+x.lon).toFixed(4), name: shortPlace(x), full: x.display_name || "" }));
+    geoCache[key] = out;
+    try { localStorage.setItem("ft.geo", JSON.stringify(geoCache)); } catch {}
+    return out;
+  });
+  geoChain = job.catch(() => {});
+  return job;
+}
+// Old place names ("Tarnow, Austria") often fail as written, so fall back to the first part ("Tarnow").
+async function bestMatch(text) {
+  let r = await geocodeSearch(text, 1);
+  if (!r.length && text.includes(",")) r = await geocodeSearch(text.split(",")[0], 1);
+  return r[0] || null;
+}
+const geoBusy = new Set(), geoFailed = new Set();
+const geoTag = (p, kind) => p.id + "|" + kind + "|" + (p[KIND_KEY[kind]] || "").trim();
+const geoFresh = (p, kind) => { const t = (p[KIND_KEY[kind]] || "").trim(), g = (p.geo || {})[kind]; return !t || (g && g.q === t); };
+async function autoGeo(id, kind) {
+  const p0 = P(id); if (!p0 || hidden(p0)) return;
+  const text = (p0[KIND_KEY[kind]] || "").trim();
+  if (!text) { if (p0.geo && p0.geo[kind] && canEditCard(p0)) { const g = { ...p0.geo }; delete g[kind]; p0.geo = g; put(p0); } return; }
+  if (geoFresh(p0, kind)) return;
+  const tag = geoTag(p0, kind); if (geoBusy.has(tag) || geoFailed.has(tag)) return; geoBusy.add(tag);
+  try {
+    const m = await bestMatch(text);
+    const p = P(id); if (!p || (p[KIND_KEY[kind]] || "").trim() !== text) return;
+    p.geo = { ...(p.geo || {}), [kind]: m ? { lat: m.lat, lng: m.lng, name: m.name, q: text } : { q: text, none: true } };
+    if (canEditCard(p)) put(p);
+  } catch { geoFailed.add(tag); /* offline or rate limited: try again after a reload */ }
+  finally { geoBusy.delete(tag); }
+}
+function geoLine(p, kind) { const el = h("div", { class: "geo", "data-kind": kind }); fillGeoLine(el, p, kind); return el; }
+function fillGeoLine(el, p, kind) {
+  const text = (p[KIND_KEY[kind]] || "").trim(), g = (p.geo || {})[kind], ed = canEditCard(p);
+  if (!text) return el.replaceChildren();
+  const fix = ed ? h("button", { text: "Change", onclick: () => openPlacePicker(p.id, kind) }) : null;
+  if (geoFailed.has(geoTag(p, kind)) && !(g && g.q === text)) return el.replaceChildren("Couldn't look this up right now.", fix);
+  if (g && g.q === text) el.replaceChildren(g.none ? "Not on the map" + (ed ? "." : "") : "On map: " + g.name + (g.manual ? " (set by hand)" : ""), g.none && ed ? h("button", { text: "Find it", onclick: () => openPlacePicker(p.id, kind) }) : fix);
+  else el.replaceChildren("Finding on the map…", fix);
+}
+function updateGeoLines() {
+  const p = P(state.sel); if (!p) return;
+  panel.querySelectorAll(".geo[data-kind]").forEach(el => fillGeoLine(el, p, el.dataset.kind));
+  for (const kind of Object.keys(KIND_KEY)) if (!geoFresh(p, kind) && !geoTimers.get("open" + kind)) {
+    geoTimers.set("open" + kind, setTimeout(() => { geoTimers.delete("open" + kind); autoGeo(p.id, kind).then(() => { if (state.sel === p.id) panel.querySelectorAll(".geo[data-kind]").forEach(el => fillGeoLine(el, P(p.id), el.dataset.kind)); }); }, 1600));
+  }
+}
+
+let leafletP = null;
+function loadLeaflet() {
+  if (window.L && window.L.map) return Promise.resolve(window.L);
+  if (leafletP) return leafletP;
+  leafletP = new Promise((res, rej) => {
+    const css = h("link", { rel: "stylesheet", href: "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css", integrity: "sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=", crossorigin: "" });
+    const js = h("script", { src: "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js", integrity: "sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=", crossorigin: "" });
+    js.onload = () => res(window.L); js.onerror = () => { leafletP = null; rej(new Error("map library")); };
+    document.head.append(css, js);
+  });
+  return leafletP;
+}
+const TILE_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
+const TILE_ATTR = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
+function tiles(LF) { return LF.tileLayer(TILE_URL, { maxZoom: 18, attribution: TILE_ATTR }); }
+
+let mapObj = null, mapLayer = null, mapFitted = false, mapTimer = null;
+const mapState = { names: new Set(), until: null };
+function surnameKeys(p) { return [p.surname, p.birthSurname].map(s => (s || "").trim()).filter(Boolean); }
+function openMap() {
+  const box = $("#mapctl");
+  if (!mapObj) box.replaceChildren(h("div", { class: "muted", text: "Opening the map…" }));
+  loadLeaflet().then(LF => {
+    if (state.view !== "map") return;
+    if (!mapObj) {
+      mapObj = LF.map("map", { zoomControl: !isPhone(), worldCopyJump: true, minZoom: 2 }).setView([40, -20], 3);
+      if (mapObj.zoomControl) mapObj.zoomControl.setPosition("topright");
+      tiles(LF).addTo(mapObj);
+      mapLayer = LF.layerGroup().addTo(mapObj);
+    }
+    setTimeout(() => { mapObj.invalidateSize(); drawMap(); }, 30);
+  }).catch(() => box.replaceChildren(h("div", { class: "muted", text: "The map couldn't load. Check your connection and try again." })));
+}
+function drawMapSoon() { clearTimeout(mapTimer); mapTimer = setTimeout(drawMap, 400); }
+function arc(a, b) {
+  // A gentle curve between two points, so long moves read as journeys.
+  let lng2 = b.lng; if (lng2 - a.lng > 180) lng2 -= 360; else if (a.lng - lng2 > 180) lng2 += 360;
+  const dx = lng2 - a.lng, dy = b.lat - a.lat, mx = (a.lng + lng2) / 2 - dy * 0.18, my = (a.lat + b.lat) / 2 + dx * 0.18 * (dx > 0 ? 1 : -1) * 0.5;
+  const pts = []; for (let i = 0; i <= 24; i++) { const t = i / 24, u = 1 - t; pts.push([u * u * a.lat + 2 * u * t * my + t * t * b.lat, u * u * a.lng + 2 * u * t * mx + t * t * lng2]); }
+  return pts;
+}
+function drawMap() {
+  if (!mapObj || state.view !== "map") return;
+  const LF = window.L, box = $("#mapctl");
+  const all = [...people.values()].filter(p => !hidden(p));
+  // Look up any places that haven't been placed yet, one at a time.
+  const todo = [];
+  for (const p of all) for (const kind of Object.keys(KIND_KEY)) if (!geoFresh(p, kind) && !geoFailed.has(geoTag(p, kind))) todo.push([p.id, kind]);
+  if (todo.length && !drawMap.busy) {
+    drawMap.busy = true;
+    (async () => { for (const [id, kind] of todo) { await autoGeo(id, kind); if (state.view === "map") drawMapSoon(); } drawMap.busy = false; drawMapSoon(); })();
+  }
+  // Year range for the slider.
+  const ys = all.map(p => year(p.birthDate)).filter(Boolean), nowY = new Date().getFullYear();
+  const minY = ys.length ? Math.floor(Math.min(...ys) / 10) * 10 : 1850;
+  if (mapState.until == null || mapState.until > nowY) mapState.until = nowY;
+  const counts = new Map();
+  for (const p of all) for (const k of new Set(surnameKeys(p))) counts.set(k, (counts.get(k) || 0) + 1);
+  const names = [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, 12).map(x => x[0]);
+  for (const n of [...mapState.names]) if (!counts.has(n)) mapState.names.delete(n);
+  const show = p => !mapState.names.size || surnameKeys(p).some(k => mapState.names.has(k));
+  const until = mapState.until, atEnd = until >= nowY;
+  const evYear = (p, kind) => kind === "birth" ? year(p.birthDate) : kind === "death" ? year(p.deathDate) : (year(p.birthDate) || null);
+  const visible = (p, kind) => { const g = (p.geo || {})[kind]; if (!g || g.none || !geoFresh(p, kind)) return false; const y = evYear(p, kind); return y ? y <= until : atEnd; };
+
+  // Group events by spot.
+  const spots = new Map(); let shown = 0;
+  for (const p of all) {
+    if (!show(p)) continue;
+    for (const kind of ["birth", "death", "lives"]) {
+      if (!visible(p, kind)) continue;
+      if (kind === "lives" && !p.living) continue;
+      const g = p.geo[kind], key = g.lat.toFixed(2) + "," + g.lng.toFixed(2);
+      if (!spots.has(key)) spots.set(key, { lat: g.lat, lng: g.lng, name: g.name, ev: [] });
+      spots.get(key).ev.push({ p, kind }); shown++;
+    }
+  }
+  mapLayer.clearLayers();
+  const COL = { birth: "var(--accent)", death: "#8a8f8c", lives: "var(--brass)" };
+  // Journeys: where each person was born to where they died or live now.
+  for (const p of all) {
+    if (!show(p) || !visible(p, "birth")) continue;
+    const endKind = p.living ? (visible(p, "lives") ? "lives" : null) : (visible(p, "death") ? "death" : null);
+    if (!endKind) continue;
+    const a = p.geo.birth, b = p.geo[endKind];
+    if (Math.abs(a.lat - b.lat) < 0.05 && Math.abs(a.lng - b.lng) < 0.05) continue;
+    LF.polyline(arc(a, b), { color: endKind === "lives" ? "#b8893f" : "#6f8f7c", weight: 2, opacity: 0.6, dashArray: endKind === "lives" ? "5 6" : null })
+      .bindPopup(() => popupFor({ name: fullName(p), ev: [{ p, kind: "move", from: a.name, to: b.name, endKind }] })).addTo(mapLayer);
+  }
+  const markers = [];
+  for (const s of spots.values()) {
+    const n = { birth: 0, death: 0, lives: 0 }; s.ev.forEach(e => n[e.kind]++);
+    const tot = s.ev.length, a1 = n.birth / tot * 100, a2 = a1 + n.death / tot * 100;
+    const bg = `conic-gradient(${COL.birth} 0 ${a1}%, ${COL.death} ${a1}% ${a2}%, ${COL.lives} ${a2}% 100%)`;
+    const icon = LF.divIcon({ className: "", iconSize: [28, 28], iconAnchor: [14, 14], popupAnchor: [0, -12], html: `<div class="mpin" style="background:${bg}"><span>${tot}</span></div>` });
+    const m = LF.marker([s.lat, s.lng], { icon, title: s.name, keyboard: true }).bindPopup(() => popupFor(s), { maxWidth: 280 }).addTo(mapLayer);
+    markers.push(m);
+  }
+
+  // Controls: family names, year slider, key.
+  const chip = (label, on, fn) => h("span", { class: "chip" + (on ? " on" : "") }, h("button", { text: label, onclick: fn }));
+  const slider = h("input", { type: "range", min: String(minY), max: String(nowY), step: "1", "aria-label": "Show events up to this year" });
+  slider.value = String(Math.max(minY, until));
+  const ylab = h("b", { text: atEnd ? "Today" : String(until) });
+  slider.addEventListener("input", () => { mapState.until = +slider.value; ylab.textContent = +slider.value >= nowY ? "Today" : slider.value; drawMapSoon(); });
+  const left = todo.length;
+  box.replaceChildren(
+    h("div", { class: "chips" }, chip("Everyone", !mapState.names.size, () => { mapState.names.clear(); mapFitted = false; drawMap(); }),
+      names.map(nm => chip(nm, mapState.names.has(nm), () => { mapState.names.has(nm) ? mapState.names.delete(nm) : mapState.names.add(nm); mapFitted = false; drawMap(); }))),
+    h("div", { class: "yr" }, h("span", { text: minY }), slider, ylab),
+    h("div", { class: "mkey" }, h("span", {}, h("i", { class: "k-birth" }), "Born"), h("span", {}, h("i", { class: "k-death" }), "Died"), h("span", {}, h("i", { class: "k-lives" }), "Lives now"),
+      h("span", { class: "mstatus", text: left ? "Placing " + left + (left === 1 ? " place" : " places") + "…" : (shown ? "" : "No places yet") })));
+  if (!mapFitted && markers.length) {
+    const top = ($("#mapctl").offsetHeight || 100) + 30;
+    mapObj.fitBounds(LF.featureGroup(markers).getBounds(), { maxZoom: 6, paddingTopLeft: [30, top], paddingBottomRight: [30, isPhone() ? 100 : 40] });
+    if (!left) mapFitted = true;
+  }
+}
+function popupFor(s) {
+  const go = id => { mapObj.closePopup(); select(id); };
+  if (s.ev[0] && s.ev[0].kind === "move") {
+    const e = s.ev[0];
+    return h("div", { class: "mpop" }, h("h4", { text: e.endKind === "lives" ? "Moved" : "Life journey" }),
+      h("button", { class: "mrow2", onclick: () => go(e.p.id) }, avatar(e.p), h("div", {}, h("div", { class: "t", text: fullName(e.p) }), h("div", { class: "w", text: e.from + " → " + e.to }))));
+  }
+  const order = { birth: 0, lives: 1, death: 2 };
+  const ev = s.ev.slice().sort((a, b) => order[a.kind] - order[b.kind] || byBirth(a.p.id, b.p.id));
+  return h("div", { class: "mpop" }, h("h4", { text: s.name }),
+    ev.map(e => { const y = e.kind === "birth" ? year(e.p.birthDate) : e.kind === "death" ? year(e.p.deathDate) : null;
+      return h("button", { class: "mrow2", onclick: () => go(e.p.id) }, avatar(e.p), h("div", {}, h("div", { class: "t", text: fullName(e.p) }), h("div", { class: "w", text: KIND_LABEL[e.kind] + " here" + (y ? " in " + y : "") }))); }));
+}
+// Fix a place by hand: search another spelling, or tap the map to drop the pin.
+function openPlacePicker(id, kind) {
+  const p = P(id); if (!p || !canEditCard(p)) return;
+  const text = (p[KIND_KEY[kind]] || "").trim(), cur = (p.geo || {})[kind];
+  let pick = cur && !cur.none ? { lat: cur.lat, lng: cur.lng, name: cur.name } : null, pmap = null, pin = null;
+  const sIn = h("input", { type: "search", id: "pl-q", placeholder: "Try a modern name, e.g. Tarnów, Poland", autocomplete: "off" });
+  sIn.value = text;
+  const list = h("div", { class: "pick" }), mapEl = h("div", { class: "pmap" }), note = h("div", { class: "muted", style: "margin:8px 0 0", text: "" });
+  const setPin = (lat, lng, name) => {
+    pick = { lat: +lat.toFixed(4), lng: +lng.toFixed(4), name };
+    note.textContent = "Pin: " + name;
+    if (pmap) { if (pin) pin.setLatLng([lat, lng]); else pin = window.L.marker([lat, lng]).addTo(pmap); }
+  };
+  const run = async () => {
+    const t = sIn.value.trim(); if (!t) return;
+    list.replaceChildren(h("div", { class: "muted", text: "Searching…" }));
+    try {
+      const rs = await geocodeSearch(t, 6);
+      list.replaceChildren(...(rs.length ? rs.map(r => h("button", { onclick: () => { setPin(r.lat, r.lng, r.name); if (pmap) pmap.setView([r.lat, r.lng], 7); } }, h("div", {}, h("div", { text: r.name }), h("div", { class: "muted", text: r.full })))) : [h("div", { class: "muted", text: "No match. Try another spelling, or tap the map." })]));
+    } catch { list.replaceChildren(h("div", { class: "muted", text: "The search isn't available right now. You can still tap the map." })); }
+  };
+  sIn.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); run(); } });
+  const save = async (val) => {
+    const c = P(id); if (!c) return closeModal();
+    c.geo = { ...(c.geo || {}), [kind]: val };
+    closeModal(); await put(c); updateGeoLines(); if (state.view === "map") drawMap(); toast("Saved");
+  };
+  dlg.replaceChildren(
+    h("h2", { text: "Where is this?" }),
+    h("div", { class: "muted", text: KIND_PLACE[kind] + " for " + fullName(p) + ": “" + text + "”" }),
+    h("div", { class: "fld" }, h("label", { for: "pl-q", text: "Search" }), h("div", { style: "display:flex;gap:6px" }, sIn, h("button", { class: "btn", text: "Search", onclick: run }))),
+    list, mapEl, note,
+    h("div", { class: "acts", style: "flex-wrap:wrap" },
+      h("button", { class: "btn", text: "Not on the map", onclick: () => save({ q: text, none: true }) }),
+      h("button", { class: "btn", text: "Cancel", onclick: closeModal }),
+      h("button", { class: "btn primary", text: "Save", onclick: () => { if (!pick) return toast("Pick a result or tap the map first."); save({ ...pick, q: text, manual: true }); } })));
+  modal.classList.add("show");
+  loadLeaflet().then(LF => {
+    if (!mapEl.isConnected) return;
+    pmap = LF.map(mapEl, { worldCopyJump: true }).setView(pick ? [pick.lat, pick.lng] : [45, 10], pick ? 6 : 2);
+    tiles(LF).addTo(pmap);
+    if (pick) pin = LF.marker([pick.lat, pick.lng]).addTo(pmap);
+    pmap.on("click", e => setPin(e.latlng.lat, e.latlng.lng, "Set by hand (" + e.latlng.lat.toFixed(2) + ", " + e.latlng.lng.toFixed(2) + ")"));
+    setTimeout(() => pmap.invalidateSize(), 50);
+  }).catch(() => mapEl.replaceWith(h("div", { class: "muted", text: "The map couldn't load here. Search results still work." })));
 }
 
 /* ---------- marriage / partnership dialog ---------- */
