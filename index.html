@@ -537,12 +537,12 @@ async function openAccount() {
   const list = h("div", { class: "mlist" });
   const draw = async () => {
     let rows = [];
-    try { const snap = await store.fdb.collection("members").get(); rows = snap.docs.map(d => ({ email: d.id, role: d.data().role || "viewer", personId: d.data().personId })).sort((a, b) => a.email.localeCompare(b.email)); } catch {}
+    try { const snap = await store.fdb.collection("members").get(); rows = snap.docs.map(d => ({ email: d.id, role: d.data().role || "viewer", personId: d.data().personId, invitedAt: d.data().invitedAt })).sort((a, b) => a.email.localeCompare(b.email)); } catch {}
     list.replaceChildren(...(rows.length ? rows.map(r => h("div", { class: "mrow" },
       h("span", { class: "mem", text: r.email + (r.personId && P(r.personId) ? " (" + fullName(P(r.personId)) + ")" : "") }),
       h("span", { class: "muted", text: r.role === "editor" ? "Can edit" : "Can view" }),
       h("button", { class: "btn small", text: r.role === "editor" ? "Make viewer" : "Make editor", onclick: async () => { await setMember(r.email, r.role === "editor" ? "viewer" : "editor", r.personId); draw(); } }),
-      h("a", { class: "btn small", href: inviteLink(r.email, r.role, r.personId), text: "Invite email" }),
+      inviteBtn(r.email, r),
       h("button", { class: "btn small danger", text: "Remove", onclick: async () => { await removeMember(r.email); draw(); } })))
       : [h("div", { class: "muted", text: "No one added yet. Only you can see the tree." })]));
   };
@@ -624,7 +624,7 @@ function accessBlock(p) {
       h("span", { class: "mem", text: em }),
       h("span", { class: "muted", text: m.role === "editor" ? "Can contribute" : "Can view" }),
       h("button", { class: "btn small", text: m.role === "editor" ? "Make viewer" : "Let contribute", onclick: () => setMember(em, m.role === "editor" ? "viewer" : "editor", p.id) }),
-      h("a", { class: "btn small", href: inviteLink(em, m.role, p.id), text: "Invite email" }),
+      inviteBtn(em, m),
       h("button", { class: "btn small danger", text: "Remove", onclick: () => removeMember(em) }))))
       : h("div", { class: "muted", text: (p.given || "This person") + " can't see the tree yet." }),
     h("div", { class: "fld", style: "margin-top:10px" }, h("label", { for: "acc-email", text: "Give access" }), inp),
@@ -634,11 +634,12 @@ function accessBlock(p) {
         if (!/^[^@\s\/]+@[^@\s\/]+\.[^@\s\/]+$/.test(em)) return toast("Enter a full email address.");
         await setMember(em, role, p.id); inp.value = "";
       } })),
-    h("div", { class: "muted", style: "margin-top:8px", text: "After you give access, tap Invite email to send them a ready-made note. Their home screen starts on " + (p.given || "their card") + ", and they manage their own card from then on." }));
+    h("div", { class: "muted", style: "margin-top:8px", text: "After you give access, tap Send invite. They get an email from you with how to sign in, and you get a copy. Their home screen starts on " + (p.given || "their card") + ", and they manage their own card from then on." }));
 }
 async function setMember(email, role, personId) {
   const prev = store.members.get(email) || {};
   const data = { role, addedAt: prev.addedAt || new Date().toISOString() };
+  if (prev.invitedAt) data.invitedAt = prev.invitedAt;
   const pid = personId || prev.personId; if (pid) data.personId = pid;
   try {
     await store.fdb.doc("members/" + email).set(data);
@@ -654,19 +655,25 @@ async function removeMember(email) {
     toast("Removed " + email);
   } catch { toast("Could not remove."); }
 }
-function inviteLink(email, role, personId) {
-  const p = personId && P(personId), first = p && p.given ? p.given.split(" ")[0] : "";
-  const lines = [
-    "Hi" + (first ? " " + first : "") + ",",
-    "",
-    "I've added you to our family tree: https://tree.polonsky.us",
-    "",
-    "Sign in with Google using " + email + ". " + (role === "editor" ? "You can look around and add relatives, photos and stories." : "You can look around the whole tree."),
-    "",
-    p ? "Your own card is yours. Only you and I can change your details. If you'd rather keep your dates, places and photo private, open your card and turn on \"Keep details private\". Your name stays in the tree so everyone stays connected." : "Anyone living can keep their dates, places and photo private. Open the card and turn on \"Keep details private\".",
-    "",
-    "Dave"];
-  return "mailto:" + encodeURIComponent(email) + "?subject=" + encodeURIComponent("You're invited to our family tree") + "&body=" + encodeURIComponent(lines.join("\n"));
+function inviteBtn(email, m) {
+  const sent = m && m.invitedAt;
+  const b = h("button", { class: "btn small", text: sent ? "Resend invite" : "Send invite", title: sent ? "Invite sent " + new Date(m.invitedAt).toLocaleDateString() : "Email them how to sign in. You get a copy." });
+  b.onclick = () => sendInvite(email, b);
+  return b;
+}
+async function sendInvite(email, btn) {
+  if (btn) { btn.disabled = true; btn.textContent = "Sending"; }
+  let res = "";
+  try {
+    const idToken = await store.user.getIdToken();
+    const r = await fetch(NOTIFY_URL, { method: "POST", headers: { "Content-Type": "text/plain" }, body: JSON.stringify({ mode: "invite", idToken, email }) });
+    res = (await r.text()).trim();
+  } catch { res = "error"; }
+  if (res === "sent" || res === "dupe") {
+    toast(res === "sent" ? "Invite sent to " + email + ". You're on BCC." : "An invite already went to " + email + " a few minutes ago.");
+    try { await store.fdb.doc("members/" + email).update({ invitedAt: new Date().toISOString() }); } catch {}
+  } else toast("The invite didn't send. Try again in a minute.");
+  if (btn && btn.isConnected) { btn.disabled = false; btn.textContent = res === "sent" || res === "dupe" ? "Resend invite" : "Send invite"; }
 }
 
 async function init() {
