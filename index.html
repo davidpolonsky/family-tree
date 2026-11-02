@@ -222,6 +222,8 @@ a.btn{text-decoration:none;color:var(--ink);display:inline-flex;align-items:cent
 
 /* Header menu (phones) */
 #menuBtn{display:none}
+#invHdrBtn{display:none}
+body.caninvite #invHdrBtn{display:inline-flex}
 .menu{position:fixed;right:12px;top:calc(var(--hh,59px) - 4px);z-index:45;background:var(--surface);border:1px solid var(--grid);border-radius:12px;box-shadow:var(--shadow);padding:6px;min-width:230px;display:none;flex-direction:column}
 .menu.show{display:flex}
 .menu .mi{display:flex;align-items:center;gap:10px;border:0;background:none;text-align:left;padding:0 12px;min-height:44px;border-radius:8px;font-size:15px}
@@ -256,7 +258,7 @@ body.mapview .legend,body.mapview .yaxis{display:none!important}
   .results{top:50px;max-height:60vh}
   .results button{min-height:48px}
   .hbtn{height:44px;min-width:44px;padding:0 11px}
-  #helpBtn,#authBtn,.sync{display:none}
+  #helpBtn,#authBtn,.sync,body.caninvite #invHdrBtn{display:none}
   #menuBtn{display:inline-flex}
   .ctl{left:10px;right:10px;bottom:12px;flex-wrap:nowrap;gap:6px}
   .pill{height:48px}
@@ -324,6 +326,7 @@ body.mapview #mapview{display:block}
     <div class="results" id="results" role="listbox"></div>
   </div>
   <button class="hbtn" id="homeBtn" title="Go to the home person"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11 12 4l9 7"/><path d="M5 10v10h14V10"/></svg><span class="lbl">Home</span></button>
+  <button class="hbtn" id="invHdrBtn" title="Give a relative view access"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="8" r="4"/><path d="M2 21c1.3-3.8 4-5.6 7-5.6s5.7 1.8 7 5.6M19 8v6M16 11h6"/></svg><span class="lbl">Invite</span></button>
   <button class="hbtn" id="helpBtn" title="How the tree works" aria-label="How the tree works"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6v.6"/><circle cx="12" cy="17.2" r=".6" fill="currentColor"/></svg></button>
   <button class="hbtn" id="authBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg><span class="lbl">Sign in to edit</span></button>
   <div class="sync" id="sync"><i></i><span class="lbl">Connecting</span></div>
@@ -620,7 +623,7 @@ function startListeners() {
 async function onAuth(u) {
   store.user = u;
   stopListeners(); people.clear(); state.focus = null; world.replaceChildren(); closePanel();
-  if (!u) { state.readOnly = true; authUI(); setSync("local", "Signed out"); gate("signin"); return; }
+  if (!u) { document.body.classList.remove("caninvite"); state.readOnly = true; authUI(); setSync("local", "Signed out"); gate("signin"); return; }
   const email = (u.email || "").toLowerCase();
   let role = email === OWNER ? "editor" : null;
   store.myMember = null; store.myHome = null; store.members = new Map(); store.membersLoaded = false; claimsSynced = false; store.role = null; privData.clear();
@@ -630,6 +633,7 @@ async function onAuth(u) {
   if (!role) { state.readOnly = true; authUI(); setSync("local", "No access"); gate("denied"); return; }
   gate(null);
   store.role = role;
+  document.body.classList.toggle("caninvite", role === "editor");
   state.readOnly = role !== "editor";
   $("#firstBtn").style.display = state.readOnly ? "none" : "";
   authUI();
@@ -642,10 +646,10 @@ async function openAccount() {
   const list = h("div", { class: "mlist" });
   const draw = async () => {
     let rows = [];
-    try { const snap = await store.fdb.collection("members").get(); rows = snap.docs.map(d => ({ email: d.id, role: d.data().role || "viewer", personId: d.data().personId, invitedAt: d.data().invitedAt })).sort((a, b) => a.email.localeCompare(b.email)); } catch {}
+    try { const snap = await store.fdb.collection("members").get(); rows = snap.docs.map(d => ({ email: d.id, role: d.data().role || "viewer", personId: d.data().personId, invitedAt: d.data().invitedAt, addedBy: d.data().addedBy })).sort((a, b) => a.email.localeCompare(b.email)); } catch {}
     list.replaceChildren(...(rows.length ? rows.map(r => h("div", { class: "mrow" },
       h("span", { class: "mem", text: r.email + (r.personId && P(r.personId) ? " (" + fullName(P(r.personId)) + ")" : "") }),
-      h("span", { class: "muted", text: r.role === "editor" ? "Can edit" : "Can view" }),
+      h("span", { class: "muted", text: (r.role === "editor" ? "Can edit" : "Can view") + (r.addedBy ? " \u00b7 invited by " + r.addedBy : "") }),
       h("button", { class: "btn small", text: r.role === "editor" ? "Make viewer" : "Make editor", onclick: async () => { await setMember(r.email, r.role === "editor" ? "viewer" : "editor", r.personId); draw(); } }),
       inviteBtn(r.email, r),
       h("button", { class: "btn small danger", text: "Remove", onclick: async () => { await removeMember(r.email); draw(); } })))
@@ -658,8 +662,23 @@ async function openAccount() {
     h("button", { "aria-pressed": String(newRole === "viewer"), text: "Can view", onclick: () => { newRole = "viewer"; drawSeg(); } }),
     h("button", { "aria-pressed": String(newRole === "editor"), text: "Can edit", onclick: () => { newRole = "editor"; drawSeg(); } }));
   drawSeg();
+  // Editors can give relatives view-only access. Dave gets an email each time.
+  const canInvite = !isOwner && store.role === "editor";
+  const invList = h("div", { class: "mlist" }), invInp = h("input", { id: "inv-email", type: "email", placeholder: "their Google email", autocomplete: "off" });
+  const drawInv = async () => {
+    let rows = [];
+    try { const snap = await store.fdb.collection("members").where("addedBy", "==", myEmail()).get(); rows = snap.docs.map(d => ({ email: d.id, role: d.data().role || "viewer" })).sort((a, b) => a.email.localeCompare(b.email)); } catch {}
+    invList.replaceChildren(...(rows.length ? rows.map(r => h("div", { class: "mrow" }, h("span", { class: "mem", text: r.email }), h("span", { class: "muted", text: r.role === "editor" ? "Can edit" : "Can view" })))
+      : [h("div", { class: "muted", text: "You haven't invited anyone yet." })]));
+  };
+  const invBtn = h("button", { class: "btn primary", text: "Invite", onclick: async () => {
+    const em = invInp.value.trim().toLowerCase();
+    if (!/^[^@\s\/]+@[^@\s\/]+\.[^@\s\/]+$/.test(em)) return toast("Enter a full email address.");
+    invBtn.disabled = true; const ok = await inviteAsEditor(em); invBtn.disabled = false;
+    if (ok) { invInp.value = ""; drawInv(); } } });
+  invInp.addEventListener("keydown", e => { if (e.key === "Enter") invBtn.click(); });
   dlg.replaceChildren(
-    h("h2", { text: isOwner ? "Family access" : "Your account" }),
+    h("h2", { text: isOwner ? "Family access" : canInvite ? "Invite family" : "Your account" }),
     h("div", { class: "muted", text: "Signed in as " + u.email + (state.readOnly ? ". You can view the tree." : ". You can edit the tree.") }),
     isOwner ? h("div", {},
       h("div", { class: "fld", style: "margin-top:6px" }, h("label", { text: "Who has access" }), list),
@@ -668,13 +687,35 @@ async function openAccount() {
         h("button", { class: "btn primary", text: "Add", onclick: async () => {
           const em = inp.value.trim().toLowerCase();
           if (!/^[^@\s\/]+@[^@\s\/]+\.[^@\s\/]+$/.test(em)) return toast("Enter a full email address.");
-          await setMember(em, newRole); inp.value = ""; draw(); } }))) : null,
+          await setMember(em, newRole); inp.value = ""; draw(); } }))) : "",
+    canInvite ? h("div", {},
+      h("div", { class: "fld", style: "margin-top:6px" }, h("label", { for: "inv-email", text: "Give a relative access" }),
+        h("div", { style: "display:flex;gap:6px" }, invInp, invBtn),
+        h("div", { class: "hint", style: "margin-left:0", text: "Use their Google (Gmail) address. They can look around the tree but not change it. They get an email with how to sign in, and Dave gets a note too. Only Dave can change or remove access." })),
+      h("div", { class: "fld", style: "margin-top:14px" }, h("label", { text: "People you invited" }), invList)) : "",
     h("div", { class: "acts" },
       h("button", { class: "btn", text: "Copy tree as JSON", onclick: copyJson }),
       h("button", { class: "btn", text: "Sign out", onclick: () => { store.auth.signOut(); closeModal(); } }),
       h("button", { class: "btn primary", text: "Done", onclick: closeModal })));
   modal.classList.add("show");
   if (isOwner) draw();
+  if (canInvite) { drawInv(); setTimeout(() => invInp.focus(), 50); }
+}
+async function inviteAsEditor(em) {
+  if (em === myEmail()) { toast("That's your own address."); return false; }
+  try { await store.fdb.doc("members/" + em).set({ role: "viewer", addedAt: new Date().toISOString(), addedBy: myEmail() }); }
+  catch (e) { toast(e && e.code === "permission-denied" ? em + " may already have access. Ask Dave if they can't get in." : "Could not add them. Check your connection and try again."); return false; }
+  let res = "";
+  try {
+    const idToken = await store.user.getIdToken();
+    const r = await fetch(NOTIFY_URL, { method: "POST", headers: { "Content-Type": "text/plain" }, body: JSON.stringify({ mode: "added", idToken, email: em }) });
+    res = (await r.text()).trim();
+  } catch { res = "error"; }
+  const tell = " Tell them to sign in at tree.polonsky.us with that Google account.";
+  toast(res === "sent" || res === "dupe" ? em + " can now view the tree. They'll get an email with how to sign in."
+    : res === "limit" ? em + " can view the tree. You've reached today's invite email limit." + tell
+    : em + " can view the tree, but the invite email didn't send." + tell);
+  return true;
 }
 function helpItems() {
   const ed = !state.readOnly;
@@ -701,6 +742,7 @@ async function maybeWelcome() {
   try { await store.fdb.doc("prefs/" + myEmail()).set({ welcomed: true }, { merge: true }); } catch {}
 }
 $("#helpBtn").onclick = () => openHelp(false);
+$("#invHdrBtn").onclick = () => openAccount();
 function isOwnerUser() { return !!store.user && (store.user.email || "").toLowerCase() === OWNER; }
 async function setMyHome(id) {
   store.myHome = id;
@@ -1230,6 +1272,7 @@ function drawMenu() {
   menu.replaceChildren(
     h("div", { class: "mstat " + sy.className.replace("sync", "").trim() }, h("i"), [$("#count").textContent, sy.querySelector(".lbl").textContent].filter(Boolean).join(" \u00b7 ")),
     h("button", { class: "mi", role: "menuitem", onclick: () => { closeMenu(); au.click(); } }, ico('<circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/>'), store.user ? "Account (" + store.user.email + ")" : "Sign in to edit"),
+    store.role === "editor" ? h("button", { class: "mi", role: "menuitem", onclick: () => { closeMenu(); openAccount(); } }, ico('<circle cx="9" cy="8" r="4"/><path d="M2 21c1.3-3.8 4-5.6 7-5.6s5.7 1.8 7 5.6M19 8v6M16 11h6"/>'), "Invite family") : null,
     h("button", { class: "mi", role: "menuitem", onclick: () => { closeMenu(); $("#helpBtn").click(); } }, ico('<circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6v.6"/>'), "How the tree works"));
 }
 function closeMenu() { menu.classList.remove("show"); menuBtn.setAttribute("aria-expanded", "false"); }
