@@ -202,6 +202,9 @@ header{position:fixed;top:0;left:0;right:0;z-index:30;display:flex;align-items:c
   .fld input,.fld textarea,.search input,.dlg input{font-size:16px}
   #panel.typing{height:calc(100% - 59px)}
 }
+.pill .vbtn{display:flex;align-items:center;gap:6px;padding:0 10px;font-size:13px;font-weight:500}
+.pill .vbtn[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink)}
+body.allview .pill.gen{display:none}
 @media (prefers-reduced-motion: reduce){*{transition:none!important}}
 </style>
 </head>
@@ -223,11 +226,12 @@ header{position:fixed;top:0;left:0;right:0;z-index:30;display:flex;align-items:c
 <div class="banner" id="banner"></div>
 
 <div class="ctl">
-  <div class="pill" aria-label="Generations above">
+  <div class="pill"><button id="viewBtn" class="vbtn" aria-pressed="false" title="See the whole family at once"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="5" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="8.5" y="16" width="7" height="5" rx="1"/><path d="M6.5 8v4h11V8M12 12v4"/></svg><span class="lbl">Whole tree</span></button></div>
+  <div class="pill gen" aria-label="Generations above">
     <label>Up</label>
     <button id="upMinus" aria-label="Show fewer generations above">−</button><output id="upVal">5</output><button id="upPlus" aria-label="Show more generations above">+</button>
   </div>
-  <div class="pill" aria-label="Generations below">
+  <div class="pill gen" aria-label="Generations below">
     <label>Down</label>
     <button id="dnMinus" aria-label="Show fewer generations below">−</button><output id="dnVal">2</output><button id="dnPlus" aria-label="Show more generations below">+</button>
   </div>
@@ -263,7 +267,7 @@ const STATUS = { confirmed: "Documented", story: "Family story", research: "Need
 const FIELDS = ["given","surname","birthSurname","aka","birthDate","birthPlace","deathDate","deathPlace","notes","sources"];
 const people = new Map();
 let homeId = null;
-const state = { focus: null, sel: null, up: 5, down: 2, readOnly: true };
+const state = { focus: null, sel: null, up: 5, down: 2, readOnly: true, view: "focus" };
 try { const s = JSON.parse(localStorage.getItem("ft.view") || "{}"); if (s.up != null) state.up = s.up; if (s.down != null) state.down = s.down; } catch {}
 
 const $ = (s, r = document) => r.querySelector(s);
@@ -542,6 +546,7 @@ function onData() {
     state.focus = people.has(hashId) ? hashId : (hm && people.has(hm) ? hm : [...people.keys()][0]);
     render(); if (state.focus === hm) fit(); else centerOn(state.focus, false, true); firstData = false;
   } else render();
+  if (state.view === "all") return;
   if (state.sel && !people.has(state.sel)) closePanel();
   else if (state.sel) refreshPanel();
 }
@@ -633,11 +638,104 @@ function layout(fid) {
   return { nodes, paths, ox: -minX + PAD, oy: -minY + PAD, w: maxX - minX + PAD * 2, h: maxY - minY + PAD * 2 };
 }
 
+/* ---------- whole tree (bird's eye) layout ---------- */
+function layoutAll() {
+  const nodes = [], paths = [];
+  const seg = (x1, y1, x2, y2, cls, pair) => paths.push({ d: `M${x1} ${y1}L${x2} ${y2}`, cls, pair, mid: pair ? [(x1 + x2) / 2, y1] : null });
+  const ids = [...people.keys()];
+  if (!ids.length) return null;
+  // 1. generations: children below parents, partners level, parents pulled down next to their children
+  const gen = new Map(ids.map(i => [i, 0]));
+  for (let it = 0; it < 80; it++) {
+    let ch = false;
+    for (const id of ids) {
+      for (const pa of parentsOf(id)) if (gen.get(id) < gen.get(pa) + 1) { gen.set(id, gen.get(pa) + 1); ch = true; }
+      for (const pt of partnersOf(id)) { const m = Math.max(gen.get(id), gen.get(pt)); if (gen.get(id) !== m) { gen.set(id, m); ch = true; } }
+      const ks = childrenOf(id);
+      if (ks.length) { const want = Math.min(...ks.map(k => gen.get(k))) - 1; if (gen.get(id) < want) { gen.set(id, want); ch = true; } }
+    }
+    if (!ch) break;
+  }
+  // 2. visit order from the home person, so related people start near each other
+  const ord = new Map(); let c = 0;
+  const walk = start => { const st = [start]; while (st.length) { const x = st.pop(); if (ord.has(x)) continue; ord.set(x, c++); [...childrenOf(x)].reverse().forEach(k => st.push(k)); [...parentsOf(x)].reverse().forEach(k => st.push(k)); partnersOf(x).forEach(k => st.push(k)); } };
+  const hm = getHome(); if (hm && people.has(hm)) walk(hm);
+  ids.forEach(i => { if (!ord.has(i)) walk(i); });
+  // 3. couples travel together as one unit per row
+  const unitOf = new Map(), rows = new Map();
+  for (const id of [...ids].sort((a, b) => ord.get(a) - ord.get(b))) {
+    if (unitOf.has(id)) continue;
+    const u = { members: [], gen: gen.get(id), x: 0 };
+    const q = [id];
+    while (q.length) { const x = q.shift(); if (unitOf.has(x) || gen.get(x) !== u.gen) continue; unitOf.set(x, u); u.members.push(x); partnersOf(x).forEach(p => q.push(p)); }
+    if (!rows.has(u.gen)) rows.set(u.gen, []);
+    rows.get(u.gen).push(u);
+  }
+  const gens = [...rows.keys()].sort((a, b) => a - b);
+  const GAP = 0.35;
+  const posOf = id => { const u = unitOf.get(id); return u.x + u.members.indexOf(id); };
+  const pack = row => { let x = 0; row.forEach(u => { u.x = x; x += u.members.length + GAP; }); };
+  gens.forEach(g => pack(rows.get(g)));
+  const place = (row, rel) => {
+    const want = row.map(u => {
+      const xs = []; u.members.forEach(m => rel(m).forEach(r => { if (unitOf.has(r)) xs.push(posOf(r)); }));
+      const center = xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : u.x + (u.members.length - 1) / 2;
+      return { u, left: center - (u.members.length - 1) / 2 };
+    });
+    if (rel === parentsOf) want.forEach(({ u }) => {
+      if (u.members.length < 2) return;
+      const key = new Map(u.members.map(m => { const xs = rel(m).filter(r => unitOf.has(r)).map(posOf); return [m, xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null]; }));
+      const known = [...key.values()].filter(v => v !== null);
+      const fill = known.length ? known.reduce((a, b) => a + b, 0) / known.length + 0.5 : 0;
+      u.members.sort((a, b) => (key.get(a) ?? fill) - (key.get(b) ?? fill));
+    });
+    want.sort((a, b) => a.left - b.left);
+    let end = -Infinity;
+    want.forEach(w => { const left = Math.max(w.left, end + GAP); w.u.x = left; end = left + w.u.members.length; });
+    row.length = 0; want.forEach(w => row.push(w.u));
+  };
+  for (let it = 0; it < 10; it++) {
+    for (let i = 1; i < gens.length; i++) place(rows.get(gens[i]), parentsOf);
+    for (let i = gens.length - 2; i >= 0; i--) place(rows.get(gens[i]), childrenOf);
+  }
+  for (let i = 1; i < gens.length; i++) place(rows.get(gens[i]), parentsOf);
+  // 4. nodes and lines
+  const X = id => posOf(id) * U, Y = id => gen.get(id) * RH;
+  ids.forEach(id => nodes.push({ id, x: X(id), y: Y(id), role: id === state.focus ? "allfocus" : "all" }));
+  rows.forEach(row => row.forEach(u => { for (let i = 0; i + 1 < u.members.length; i++) { const a = u.members[i], b = u.members[i + 1]; if (partnersOf(a).includes(b)) seg(X(a) + CW / 2, Y(a), X(b) - CW / 2, Y(b), "couple", [a, b]); } }));
+  const fams = new Map();
+  ids.forEach(id => { const ps = parentsOf(id); if (!ps.length) return; const k = [...ps].sort().join("|"); if (!fams.has(k)) fams.set(k, { ps, kids: [] }); fams.get(k).kids.push(id); });
+  const famList = [...fams.values()].map(f => ({ ...f, kg: Math.min(...f.kids.map(k => gen.get(k))), left: Math.min(...f.ps.map(X), ...f.kids.map(X)) }));
+  const laneCount = new Map();
+  famList.sort((a, b) => a.left - b.left).forEach(f => { const n = laneCount.get(f.kg) || 0; f.lane = n % 4; laneCount.set(f.kg, n + 1); });
+  famList.forEach(({ ps, kids, kg, lane }) => {
+    const busY = kg * RH - CH / 2 - 12 - lane * 14;
+    const starts = [];
+    const adj = ps.length === 2 && unitOf.get(ps[0]) === unitOf.get(ps[1]) && Math.abs(posOf(ps[0]) - posOf(ps[1])) === 1;
+    if (adj) { const mx = (X(ps[0]) + X(ps[1])) / 2; seg(mx, Y(ps[0]), mx, busY); starts.push(mx); }
+    else ps.forEach(p => { seg(X(p), Y(p) + CH / 2, X(p), busY); starts.push(X(p)); });
+    const kx = kids.map(X);
+    seg(Math.min(...starts, ...kx), busY, Math.max(...starts, ...kx), busY);
+    kids.forEach(k => { const unc = (P(k).uncertain || []).some(u => ps.includes(u)) ? "uncertain" : undefined; seg(X(k), busY, X(k), Y(k) - CH / 2, unc); });
+  });
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  for (const n of nodes) { minX = Math.min(minX, n.x - CW / 2); maxX = Math.max(maxX, n.x + CW / 2); minY = Math.min(minY, n.y - CH / 2); maxY = Math.max(maxY, n.y + CH / 2); }
+  return { nodes, paths, ox: -minX + PAD, oy: -minY + PAD, w: maxX - minX + PAD * 2, h: maxY - minY + PAD * 2 };
+}
+function setView(v) {
+  state.view = v;
+  const b = $("#viewBtn"); if (b) { b.querySelector(".lbl").textContent = v === "all" ? "Focus view" : "Whole tree"; b.setAttribute("aria-pressed", String(v === "all")); }
+  document.body.classList.toggle("allview", v === "all");
+  render(); if (v === "all") { closePanelQuiet(); fit(); } else centerOn(state.focus, true, true);
+}
+function closePanelQuiet() { state.sel = null; panel.classList.remove("open"); }
+
 /* ---------- render ---------- */
 const NS = "http://www.w3.org/2000/svg";
 function render() {
-  if (!state.focus || !people.has(state.focus)) return;
-  L = layout(state.focus);
+  if (state.view !== "all" && (!state.focus || !people.has(state.focus))) return;
+  L = state.view === "all" ? layoutAll() : layout(state.focus);
+  if (!L) return;
   world.style.width = L.w + "px"; world.style.height = L.h + "px";
   const svg = document.createElementNS(NS, "svg"), labels = [];
   svg.setAttribute("width", L.w); svg.setAttribute("height", L.h);
@@ -658,7 +756,7 @@ function card(n) {
   const p = P(n.id);
   const life = lifeLine(p);
   const el = h("div", {
-    class: "card" + (n.role === "focus" ? " focus" : "") + (p.status === "research" ? " research" : ""),
+    class: "card" + (n.role === "focus" || n.role === "allfocus" ? " focus" : "") + (p.status === "research" ? " research" : ""),
     style: `left:${n.x + L.ox - CW / 2}px;top:${n.y + L.oy - CH / 2}px`,
     tabindex: "0", role: "button", "aria-label": fullName(p) + (life ? ", " + life : ""), "data-id": n.id
   },
@@ -685,6 +783,7 @@ function addBtn(pos, label, fn) {
   return h("button", { class: "add " + pos, "aria-label": label, title: label, onclick: e => { e.stopPropagation(); fn(); } }, h("span", { text: "+" }));
 }
 function select(id) {
+  if (state.view === "all") { state.focus = id; setView("focus"); openPanel(id); try { location.hash = id; } catch {} return; }
   const changed = state.focus !== id;
   state.focus = id;
   if (location.hash.slice(1) !== id) { try { location.hash = id; } catch {} }
@@ -766,7 +865,8 @@ $("#dnMinus").onclick = () => setGen("down", -1); $("#dnPlus").onclick = () => s
 $("#zIn").onclick = () => { const v = viewBox(); zoomAt(v.x + v.w / 2, v.y + v.h / 2, cam.k * 1.25); applyCam(true); };
 $("#zOut").onclick = () => { const v = viewBox(); zoomAt(v.x + v.w / 2, v.y + v.h / 2, cam.k / 1.25); applyCam(true); };
 $("#zFit").onclick = fit;
-$("#homeBtn").onclick = () => { const hm = getHome(); const id = hm && people.has(hm) ? hm : state.focus; if (!id) return; state.focus = id; closePanel(); render(); fit(); };
+$("#homeBtn").onclick = () => { const hm = getHome(); const id = hm && people.has(hm) ? hm : state.focus; if (!id) return; state.focus = id; state.view = "focus"; setView("focus"); closePanel(); render(); fit(); };
+$("#viewBtn").onclick = () => setView(state.view === "all" ? "focus" : "all");
 $("#firstBtn").onclick = () => openAdd("first", null);
 addEventListener("hashchange", () => { const id = decodeURIComponent(location.hash.slice(1)); if (people.has(id) && id !== state.focus) { state.focus = id; render(); centerOn(id, true); if (state.sel) openPanel(id); } });
 
