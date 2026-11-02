@@ -314,9 +314,13 @@ function reindex() {
     kidsIdx.get(par).push(p.id);
   }
   for (const arr of kidsIdx.values()) arr.sort(byBirth);
+  partIdx = new Map();
+  const link = (a, b) => { if (!partIdx.has(a)) partIdx.set(a, new Set()); partIdx.get(a).add(b); };
+  for (const p of people.values()) for (const o of p.partners || []) { link(p.id, o); link(o, p.id); }
 }
 const parentsOf = id => (P(id)?.parents || []).filter(x => people.has(x)).slice(0, 2);
-const partnersOf = id => (P(id)?.partners || []).filter(x => people.has(x));
+let partIdx = new Map();
+const partnersOf = id => [...(partIdx.get(id) || [])].filter(x => people.has(x) && x !== id);
 const childrenOf = id => kidsIdx.get(id) || [];
 const UNION = { married: "Married", partners: "Partners", divorced: "Divorced", separated: "Separated", widowed: "Widowed" };
 function unionOf(a, b) { const u = (P(a)?.unions || {})[b] || (P(b)?.unions || {})[a] || {}; return { status: u.status || "married", start: u.start || "", end: u.end || "" }; }
@@ -348,8 +352,9 @@ function put(p) {
   people.set(p.id, p);
   if (store.mode !== "fb" || state.readOnly) return Promise.resolve();
   const prev = store.chains.get(p.id) || Promise.resolve();
+  const data = body(p);
   bump(1);
-  const next = prev.then(() => store.fdb.collection("people").doc(p.id).set(body(P(p.id) || p)))
+  const next = prev.then(() => store.fdb.collection("people").doc(p.id).set(data))
     .catch(e => handleWriteError(e)).finally(() => bump(-1));
   store.chains.set(p.id, next);
   return next;
@@ -360,7 +365,7 @@ function del(id) {
   bump(1);
   return store.fdb.collection("people").doc(id).delete().catch(handleWriteError).finally(() => bump(-1));
 }
-async function putAll(list) { const seen = new Set(); for (const p of list) { if (seen.has(p.id)) continue; seen.add(p.id); await put(P(p.id) || p); } }
+async function putAll(list) { const seen = new Set(); for (const p of list) { if (seen.has(p.id)) continue; seen.add(p.id); await put(p); } }
 function handleWriteError(e) {
   const code = e && e.code;
   if (code === "permission-denied") { setEditMode(false); toast("You don't have edit access. Ask Dave to add you."); }
@@ -409,7 +414,7 @@ function startListeners() {
   const timer = setTimeout(() => { if (!loaded) banner("The tree can't be reached yet. It will appear when the connection returns."); }, 10000);
   unsubs.push(store.fdb.collection("people").onSnapshot(snap => {
     people.clear();
-    for (const d of snap.docs) people.set(d.id, { ...blank(d.id), ...d.data(), id: d.id });
+    for (const d of snap.docs) people.set(d.id, { ...blank(d.id), ...d.data(), id: d.id, ...(pendingEdits.get(d.id) || {}) });
     if (!loaded) { loaded = true; clearTimeout(timer); banner(""); }
     if (!pending) bump(0);
     onData();
@@ -890,10 +895,10 @@ document.addEventListener("click", e => { if (!e.target.closest(".search")) resu
 /* ---------- panel ---------- */
 function openPanel(id) { state.sel = id; panel.classList.add("open"); buildPanel(); }
 function closePanel() { const was = panel.classList.contains("open"); state.sel = null; panel.classList.remove("open"); if (was && state.focus && L) centerOn(state.focus, true); }
-const saveTimers = new Map();
+const saveTimers = new Map(), pendingEdits = new Map();
 function scheduleSave(id) {
   clearTimeout(saveTimers.get(id));
-  saveTimers.set(id, setTimeout(async () => { const p = P(id); if (!p) return; await put(p); flashSaved(); }, 500));
+  saveTimers.set(id, setTimeout(async () => { const p = P(id); if (!p) return; const pe = pendingEdits.get(id); if (pe) Object.assign(p, pe); await put(p); if (pendingEdits.get(id) === pe) pendingEdits.delete(id); flashSaved(); }, 500));
 }
 function flashSaved() { const s = panel.querySelector(".saved"); if (!s) return; s.classList.add("show"); setTimeout(() => s.classList.remove("show"), 1400); }
 let renderT;
@@ -904,7 +909,7 @@ function field(p, key, label, opts = {}) {
   const input = opts.area ? h("textarea", { id, placeholder: opts.ph || "" }) : h("input", { id, type: "text", placeholder: opts.ph || "", autocomplete: "off" });
   input.value = p[key] || "";
   input.disabled = state.readOnly;
-  input.addEventListener("input", () => { const cur = P(p.id); if (!cur) return; cur[key] = input.value; scheduleSave(p.id); softRender(); if (key === "given" || key === "surname" || key.startsWith("birth") || key.startsWith("death")) updateHead(); });
+  input.addEventListener("input", () => { const cur = P(p.id); if (!cur) return; cur[key] = input.value; pendingEdits.set(p.id, { ...(pendingEdits.get(p.id) || {}), [key]: input.value }); scheduleSave(p.id); softRender(); if (key === "given" || key === "surname" || key.startsWith("birth") || key.startsWith("death")) updateHead(); });
   return h("div", { class: "fld" + (opts.full ? " full" : "") }, h("label", { for: id, text: label }), input);
 }
 function focusField(k) { const el = panel.querySelector("#f-" + k); if (!el) return; el.focus(); setTimeout(() => el.scrollIntoView({ block: "center", behavior: "smooth" }), 250); }
