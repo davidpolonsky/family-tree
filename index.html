@@ -1,0 +1,978 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Polonsky Family Tree</title>
+<meta name="robots" content="noindex, nofollow">
+<meta name="description" content="The Polonsky family tree">
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  /* Archive palette: Wall of Honor slate green, aged paper, brass for the person in focus.
+     Layout: full-bleed pan/zoom canvas, slim header, floating controls, detail drawer. */
+  --bg:#e9ece7;
+  --grid:#d7ddd5;
+  --surface:#fbfcfa;
+  --ink:#1b2420;
+  --muted:#5f6b65;
+  --line:#8a968f;
+  --accent:#2f4a3e;
+  --accent-ink:#f3f6f2;
+  --brass:#a87f3e;
+  --ok:#3f7a52;
+  --story:#b07a1e;
+  --research:#6d7f96;
+  --danger:#a8423a;
+  --shadow:0 1px 2px rgba(20,30,25,.08),0 6px 18px rgba(20,30,25,.08);
+  --font-display:"Instrument Serif",Georgia,"Times New Roman",serif;
+  --font-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#121815;--grid:#1c2420;--surface:#1b2420;--ink:#e6ebe7;--muted:#9aa69f;--line:#5b6a62;
+    --accent:#8fb8a2;--accent-ink:#0f1512;--brass:#d2a65f;--ok:#7cc492;--story:#e0aa4a;--research:#93a8c4;--danger:#e07a70;
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 22px rgba(0,0,0,.35);color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#121815;--grid:#1c2420;--surface:#1b2420;--ink:#e6ebe7;--muted:#9aa69f;--line:#5b6a62;
+  --accent:#8fb8a2;--accent-ink:#0f1512;--brass:#d2a65f;--ok:#7cc492;--story:#e0aa4a;--research:#93a8c4;--danger:#e07a70;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 22px rgba(0,0,0,.35);color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--font-body);font-size:15px;overflow:hidden;-webkit-font-smoothing:antialiased}
+button,input,textarea,select{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--brass);outline-offset:2px}
+
+/* Header */
+header{position:fixed;top:0;left:0;right:0;z-index:30;display:flex;align-items:center;gap:12px;padding:10px 16px;background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:blur(8px);border-bottom:1px solid var(--grid)}
+.brand{display:flex;flex-direction:column;line-height:1;min-width:0}
+.brand b{font-family:var(--font-display);font-weight:400;font-size:26px;letter-spacing:.2px;white-space:nowrap}
+.brand small{color:var(--muted);font-size:12px;margin-top:3px;white-space:nowrap}
+.search{position:relative;flex:1;max-width:380px;margin-left:auto}
+.search input{width:100%;height:38px;border-radius:10px;border:1px solid var(--grid);background:var(--surface);padding:0 12px 0 34px}
+.search svg{position:absolute;left:11px;top:11px;width:16px;height:16px;color:var(--muted)}
+.results{position:absolute;top:44px;left:0;right:0;background:var(--surface);border:1px solid var(--grid);border-radius:12px;box-shadow:var(--shadow);max-height:320px;overflow:auto;display:none;padding:4px}
+.results.show{display:block}
+.results button{display:flex;width:100%;gap:10px;align-items:center;text-align:left;background:none;border:0;padding:8px;border-radius:8px}
+.results button:hover,.results button:focus-visible{background:var(--bg)}
+.results .meta{color:var(--muted);font-size:12px}
+.hbtn{height:38px;min-width:38px;padding:0 12px;border-radius:10px;border:1px solid var(--grid);background:var(--surface);display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.hbtn svg{width:16px;height:16px}
+.sync{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px;white-space:nowrap}
+.sync i{width:8px;height:8px;border-radius:50%;background:var(--muted);display:inline-block}
+.sync.ok i{background:var(--ok)} .sync.busy i{background:var(--story)} .sync.local i{background:var(--research)}
+
+/* Canvas */
+#vp{position:fixed;inset:0;overflow:hidden;touch-action:none;cursor:grab;
+  background-image:radial-gradient(var(--grid) 1px,transparent 1px);background-size:24px 24px}
+#vp.drag{cursor:grabbing}
+#world{position:absolute;left:0;top:0;transform-origin:0 0;will-change:transform}
+#world svg{position:absolute;left:0;top:0;overflow:visible;pointer-events:none}
+#world svg path{fill:none;stroke:var(--line);stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+#world svg path.couple{stroke:var(--brass);stroke-width:2}
+
+.card{position:absolute;width:184px;height:100px;background:var(--surface);border:1px solid var(--grid);border-radius:14px;box-shadow:var(--shadow);
+  display:flex;gap:10px;align-items:center;padding:10px 12px 10px 10px;cursor:pointer;user-select:none;-webkit-user-select:none;transition:border-color .15s,transform .15s}
+.card:hover{border-color:var(--line)}
+.card.focus{border:2px solid var(--brass);box-shadow:0 0 0 5px color-mix(in srgb,var(--brass) 18%,transparent),var(--shadow)}
+.card.research{border-style:dashed}
+.ph{flex:none;width:52px;height:52px;border-radius:50%;background:color-mix(in srgb,var(--accent) 14%,var(--surface));color:var(--accent);display:grid;place-items:center;font-family:var(--font-display);font-size:22px;overflow:hidden}
+.ph img{width:100%;height:100%;object-fit:cover}
+.tx{min-width:0;display:flex;flex-direction:column;gap:2px}
+.nm{font-weight:600;font-size:14px;line-height:1.2;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.yr{font-size:12.5px;color:var(--ink);font-variant-numeric:tabular-nums}
+.yr.none{color:var(--muted);font-style:italic}
+.pl{font-size:11.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dot{position:absolute;top:9px;right:9px;width:8px;height:8px;border-radius:50%}
+.dot.confirmed{background:var(--ok)} .dot.story{background:var(--story)} .dot.research{background:transparent;border:1.5px solid var(--research)}
+.role{position:absolute;bottom:-9px;left:12px;font-size:10px;letter-spacing:.06em;text-transform:uppercase;background:var(--bg);color:var(--muted);padding:1px 6px;border-radius:6px;border:1px solid var(--grid)}
+.add{position:absolute;width:28px;height:28px;border-radius:50%;border:0;background:var(--accent);color:var(--accent-ink);display:grid;place-items:center;font-size:18px;line-height:1;box-shadow:var(--shadow);z-index:2}
+.add:hover{transform:scale(1.08)}
+.add.up{top:-14px;left:78px}.add.down{bottom:-14px;left:78px}.add.right{right:-14px;top:14px}.add.left{left:-14px;top:14px}
+.add span{pointer-events:none}
+
+/* Floating controls */
+.ctl{position:fixed;left:16px;bottom:16px;z-index:20;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.pill{display:flex;align-items:center;background:var(--surface);border:1px solid var(--grid);border-radius:12px;box-shadow:var(--shadow);height:40px;padding:0 4px}
+.pill button{border:0;background:none;height:32px;min-width:32px;border-radius:8px;display:grid;place-items:center}
+.pill button:hover{background:var(--bg)}
+.pill label{font-size:12px;color:var(--muted);padding:0 6px 0 8px}
+.pill output{min-width:16px;text-align:center;font-weight:600;font-variant-numeric:tabular-nums}
+.pill svg{width:16px;height:16px}
+.legend{position:fixed;right:16px;bottom:16px;z-index:20;display:flex;gap:14px;font-size:12px;color:var(--muted);background:var(--surface);border:1px solid var(--grid);border-radius:12px;padding:9px 12px;box-shadow:var(--shadow)}
+.legend span{display:flex;align-items:center;gap:6px}
+.legend .dot{position:static}
+
+/* Panel */
+#panel{position:fixed;z-index:40;background:var(--surface);box-shadow:var(--shadow);display:flex;flex-direction:column;transition:transform .3s cubic-bezier(.2,.7,.2,1)}
+@media (min-width:761px){#panel{top:59px;right:0;bottom:0;width:400px;border-left:1px solid var(--grid);transform:translateX(105%)}#panel.open{transform:none}}
+@media (max-width:760px){#panel{left:0;right:0;bottom:0;height:60%;border-radius:18px 18px 0 0;border-top:1px solid var(--grid);transform:translateY(105%)}#panel.open{transform:none}
+  .legend{display:none}.brand small{display:none}.brand b{font-size:21px}.hbtn .lbl{display:none}.sync .lbl{display:none}}
+.p-head{display:flex;gap:14px;align-items:center;padding:18px 18px 12px;border-bottom:1px solid var(--grid)}
+.p-head .big{width:76px;height:76px;border-radius:50%;flex:none;background:color-mix(in srgb,var(--accent) 14%,var(--surface));display:grid;place-items:center;overflow:hidden;font-family:var(--font-display);font-size:32px;color:var(--accent);position:relative}
+.p-head .big img{width:100%;height:100%;object-fit:cover}
+.p-head h2{font-family:var(--font-display);font-weight:400;font-size:30px;line-height:1.05;margin:0;text-wrap:balance}
+.p-head .sub{color:var(--muted);font-size:13px;margin-top:4px}
+.p-head .x{margin-left:auto;align-self:flex-start;border:0;background:none;width:34px;height:34px;border-radius:8px;font-size:22px;color:var(--muted)}
+.p-body{overflow:auto;padding:6px 18px 28px;flex:1}
+.sec{padding:14px 0;border-bottom:1px solid var(--grid)}
+.sec:last-child{border-bottom:0}
+.sec h3{margin:0 0 10px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600;display:flex;align-items:center;gap:8px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.fld{display:flex;flex-direction:column;gap:4px}
+.fld.full{grid-column:1/-1}
+.fld label{font-size:12px;color:var(--muted)}
+.fld input,.fld textarea{border:1px solid var(--grid);border-radius:9px;background:var(--bg);padding:8px 10px;min-height:38px;width:100%}
+.fld textarea{min-height:92px;resize:vertical;line-height:1.45}
+.fld input:focus,.fld textarea:focus{border-color:var(--accent);outline:none;background:var(--surface)}
+.seg{display:flex;gap:6px;flex-wrap:wrap}
+.seg button{border:1px solid var(--grid);background:var(--bg);border-radius:999px;padding:6px 12px;font-size:13px;display:flex;align-items:center;gap:6px}
+.seg button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.seg .dot{position:static}
+.chk{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted);margin-top:8px}
+.rel{display:flex;flex-direction:column;gap:6px;margin-bottom:12px}
+.rel .lab{font-size:12px;color:var(--muted)}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{display:inline-flex;align-items:center;border:1px solid var(--grid);border-radius:999px;background:var(--bg);overflow:hidden}
+.chip button{border:0;background:none;padding:5px 10px;font-size:13px}
+.chip button.un{padding:5px 8px 5px 2px;color:var(--muted)}
+.chip button.un:hover{color:var(--danger)}
+.chip.confirm{border-color:var(--danger)}
+.chip.confirm button{color:var(--danger)}
+.addrow{display:flex;flex-wrap:wrap;gap:6px}
+.btn{border:1px solid var(--grid);background:var(--bg);border-radius:9px;padding:7px 12px;font-size:13px}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn.danger{color:var(--danger)}
+.btn.small{padding:5px 10px;font-size:12px}
+.photoacts{display:flex;gap:6px;margin-top:8px}
+.muted{color:var(--muted);font-size:13px}
+.saved{font-size:11px;color:var(--ok);text-transform:none;letter-spacing:0;font-weight:500;opacity:0;transition:opacity .3s}
+.saved.show{opacity:1}
+
+/* Modal */
+#modal{position:fixed;inset:0;z-index:60;background:rgba(10,15,12,.38);display:none;align-items:center;justify-content:center;padding:16px}
+#modal.show{display:flex}
+.dlg{background:var(--surface);border-radius:16px;box-shadow:var(--shadow);width:min(440px,100%);max-height:90%;overflow:auto;padding:20px}
+.dlg h2{font-family:var(--font-display);font-weight:400;font-size:28px;margin:0 0 4px}
+.dlg .muted{margin-bottom:14px}
+.dlg .tabs{display:flex;gap:6px;margin-bottom:14px}
+.dlg .acts{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}
+.pick{display:flex;flex-direction:column;gap:4px;max-height:240px;overflow:auto;margin-top:8px}
+.pick button{display:flex;gap:10px;align-items:center;text-align:left;border:1px solid transparent;background:none;padding:6px;border-radius:9px}
+.pick button:hover,.pick button[aria-pressed="true"]{background:var(--bg);border-color:var(--grid)}
+.pick .ph,.results .ph{width:32px;height:32px;font-size:15px}
+
+/* Toast, banners, empty */
+#toast{position:fixed;left:50%;bottom:76px;transform:translateX(-50%) translateY(20px);opacity:0;z-index:70;background:var(--ink);color:var(--bg);padding:10px 14px;border-radius:10px;font-size:13px;transition:all .25s;pointer-events:none;max-width:90%}
+#toast.show{opacity:1;transform:translateX(-50%)}
+.banner{position:fixed;top:66px;left:50%;transform:translateX(-50%);z-index:25;background:var(--surface);border:1px solid var(--grid);border-radius:10px;padding:8px 12px;font-size:13px;color:var(--muted);box-shadow:var(--shadow);display:none;max-width:92%}
+.banner.show{display:block}
+.empty{position:fixed;inset:0;display:none;align-items:center;justify-content:center;flex-direction:column;gap:12px;text-align:center;padding:24px}
+.empty.show{display:flex}
+.empty h2{font-family:var(--font-display);font-weight:400;font-size:36px;margin:0}
+.gate{position:fixed;inset:0;z-index:50;display:none;align-items:center;justify-content:center;padding:24px;background:var(--bg);
+  background-image:radial-gradient(var(--grid) 1px,transparent 1px);background-size:24px 24px}
+.gate.show{display:flex}
+.gcard{background:var(--surface);border:1px solid var(--grid);border-radius:18px;box-shadow:var(--shadow);padding:32px 28px;max-width:420px;text-align:center;display:flex;flex-direction:column;gap:14px;align-items:center}
+.gcard h2{font-family:var(--font-display);font-weight:400;font-size:38px;line-height:1.05;margin:0;text-wrap:balance}
+.gcard p{margin:0;line-height:1.5}
+.btn.big{padding:11px 18px;font-size:15px}
+.mlist{display:flex;flex-direction:column;gap:6px}
+.mrow{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 10px;border:1px solid var(--grid);border-radius:10px;background:var(--bg)}
+.mrow .mem{font-weight:500;flex:1;min-width:160px;word-break:break-all}
+@media (prefers-reduced-motion: reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div id="vp"><div id="world"></div></div>
+
+<header>
+  <div class="brand"><b>The Family Tree</b><small id="count">Opening the tree</small></div>
+  <div class="search">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+    <input id="q" type="search" placeholder="Find a person" autocomplete="off" aria-label="Find a person">
+    <div class="results" id="results" role="listbox"></div>
+  </div>
+  <button class="hbtn" id="homeBtn" title="Go to the home person"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11 12 4l9 7"/><path d="M5 10v10h14V10"/></svg><span class="lbl">Home</span></button>
+  <button class="hbtn" id="authBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg><span class="lbl">Sign in to edit</span></button>
+  <div class="sync" id="sync"><i></i><span class="lbl">Connecting</span></div>
+</header>
+
+<div class="banner" id="banner"></div>
+
+<div class="ctl">
+  <div class="pill" aria-label="Generations above">
+    <label>Up</label>
+    <button id="upMinus" aria-label="Show fewer generations above">−</button><output id="upVal">5</output><button id="upPlus" aria-label="Show more generations above">+</button>
+  </div>
+  <div class="pill" aria-label="Generations below">
+    <label>Down</label>
+    <button id="dnMinus" aria-label="Show fewer generations below">−</button><output id="dnVal">2</output><button id="dnPlus" aria-label="Show more generations below">+</button>
+  </div>
+  <div class="pill">
+    <button id="zOut" aria-label="Zoom out"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14"/></svg></button>
+    <button id="zFit" aria-label="Fit tree to screen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+    <button id="zIn" aria-label="Zoom in"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5v14"/></svg></button>
+  </div>
+</div>
+
+<div class="legend" aria-label="Legend">
+  <span><i class="dot confirmed"></i>Documented</span>
+  <span><i class="dot story"></i>Family story</span>
+  <span><i class="dot research"></i>Needs research</span>
+</div>
+
+<div id="gate" class="gate"></div>
+<aside id="panel" aria-label="Person details"></aside>
+<div id="modal" role="dialog" aria-modal="true"><div class="dlg" id="dlg"></div></div>
+<div id="toast" role="status"></div>
+<div class="empty" id="empty">
+  <h2>Start the tree</h2>
+  <p class="muted">Add the first person. Everyone else connects from there.</p>
+  <button class="btn primary" id="firstBtn">Add a person</button>
+</div>
+
+<script>
+(() => {
+"use strict";
+/* ---------- constants & state ---------- */
+const U = 212, CW = 184, CH = 100, RH = 176, PAD = 120;
+const STATUS = { confirmed: "Documented", story: "Family story", research: "Needs research" };
+const FIELDS = ["given","surname","birthSurname","aka","birthDate","birthPlace","deathDate","deathPlace","notes","sources"];
+const people = new Map();
+let homeId = null;
+const state = { focus: null, sel: null, up: 5, down: 2, readOnly: true };
+try { const s = JSON.parse(localStorage.getItem("ft.view") || "{}"); if (s.up != null) state.up = s.up; if (s.down != null) state.down = s.down; } catch {}
+
+const $ = (s, r = document) => r.querySelector(s);
+const vp = $("#vp"), world = $("#world"), panel = $("#panel");
+function h(tag, attrs, ...kids) {
+  const el = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (v == null || v === false) continue;
+    if (k === "class") el.className = v;
+    else if (k === "text") el.textContent = v;
+    else if (k.startsWith("on")) el.addEventListener(k.slice(2), v);
+    else el.setAttribute(k, v === true ? "" : v);
+  }
+  for (const kid of kids.flat()) { if (kid == null || kid === false) continue; el.append(kid.nodeType ? kid : document.createTextNode(String(kid))); }
+  return el;
+}
+const toastEl = $("#toast"); let toastT;
+function toast(msg) { toastEl.textContent = msg; toastEl.classList.add("show"); clearTimeout(toastT); toastT = setTimeout(() => toastEl.classList.remove("show"), 2600); }
+function setSync(cls, label) { const s = $("#sync"); s.className = "sync " + cls; s.querySelector(".lbl").textContent = label; }
+function banner(msg) { const b = $("#banner"); b.textContent = msg || ""; b.classList.toggle("show", !!msg); }
+
+/* ---------- person helpers ---------- */
+const P = id => people.get(id);
+const fullName = p => p ? ([p.given, p.surname || p.birthSurname].filter(Boolean).join(" ") || "Unnamed") : "Unknown";
+const initials = p => { const s = [p.given, p.surname || p.birthSurname].filter(Boolean).join(" ").trim(); if (!s) return "?"; const w = s.split(/\s+/); return (w[0][0] + (w.length > 1 ? w[w.length - 1][0] : "")).toUpperCase(); };
+const year = s => { const m = String(s || "").match(/\b(\d{4})\b/); return m ? +m[1] : null; };
+function lifeLine(p) {
+  const b = year(p.birthDate), d = year(p.deathDate);
+  if (b && d) return b + " - " + d;
+  if (b) return (p.deathDate ? b + " - ?" : "b. " + b);
+  if (d) return "d. " + d;
+  if (p.birthDate) return "b. " + p.birthDate;
+  return "";
+}
+function photoSrc(p) { if (!p) return null; if (p.photoId) return "/_blob/" + p.photoId; if (p.photoData) return p.photoData; return null; }
+function avatar(p, cls = "ph") { const src = photoSrc(p); return h("div", { class: cls }, src ? h("img", { src, alt: "" }) : initials(p)); }
+function byBirth(a, b) { const ya = year(P(a)?.birthDate) ?? 9999, yb = year(P(b)?.birthDate) ?? 9999; return ya - yb || fullName(P(a)).localeCompare(fullName(P(b))); }
+let kidsIdx = new Map();
+function reindex() {
+  kidsIdx = new Map();
+  for (const p of people.values()) for (const par of p.parents || []) {
+    if (!people.has(par)) continue;
+    if (!kidsIdx.has(par)) kidsIdx.set(par, []);
+    kidsIdx.get(par).push(p.id);
+  }
+  for (const arr of kidsIdx.values()) arr.sort(byBirth);
+}
+const parentsOf = id => (P(id)?.parents || []).filter(x => people.has(x)).slice(0, 2);
+const partnersOf = id => (P(id)?.partners || []).filter(x => people.has(x));
+const childrenOf = id => kidsIdx.get(id) || [];
+function siblingsOf(id) {
+  const set = new Set();
+  for (const par of parentsOf(id)) for (const k of childrenOf(par)) if (k !== id) set.add(k);
+  return [...set].sort(byBirth);
+}
+function slug(s) { return (s || "person").toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40) || "person"; }
+function newId(name) { let id; do { id = slug(name) + "-" + Math.random().toString(36).slice(2, 6); } while (people.has(id)); return id; }
+function blank(id) { return { id, given: "", surname: "", birthSurname: "", aka: "", birthDate: "", birthPlace: "", deathDate: "", deathPlace: "", living: false, notes: "", sources: "", status: "research", photoId: "", parents: [], partners: [] }; }
+
+/* ---------- storage (Firebase) ---------- */
+const FB_CONFIG = {
+  apiKey: "AIzaSyBMWKSXlLsgQtoyZv4W0JiGjlvhdL3Z3OA",
+  authDomain: "polonsky-family-tree.firebaseapp.com",
+  projectId: "polonsky-family-tree",
+  storageBucket: "polonsky-family-tree.firebasestorage.app",
+  messagingSenderId: "146496651976",
+  appId: "1:146496651976:web:11b6ce45d70980f81c9bfd"
+};
+const OWNER = "davidpolonsky@gmail.com";
+const store = { mode: "loading", fdb: null, auth: null, user: null, editors: [], chains: new Map() };
+function body(p) { const b = { ...p }; delete b.id; b.updatedAt = new Date().toISOString(); return b; }
+let pending = 0;
+function bump(d) { pending += d; if (store.mode === "fb") setSync(pending ? "busy" : "ok", pending ? "Saving" : (state.readOnly ? "View only" : "Saved")); }
+function put(p) {
+  people.set(p.id, p);
+  if (store.mode !== "fb" || state.readOnly) return Promise.resolve();
+  const prev = store.chains.get(p.id) || Promise.resolve();
+  bump(1);
+  const next = prev.then(() => store.fdb.collection("people").doc(p.id).set(body(P(p.id) || p)))
+    .catch(e => handleWriteError(e)).finally(() => bump(-1));
+  store.chains.set(p.id, next);
+  return next;
+}
+function del(id) {
+  people.delete(id);
+  if (store.mode !== "fb" || state.readOnly) return Promise.resolve();
+  bump(1);
+  return store.fdb.collection("people").doc(id).delete().catch(handleWriteError).finally(() => bump(-1));
+}
+async function putAll(list) { const seen = new Set(); for (const p of list) { if (seen.has(p.id)) continue; seen.add(p.id); await put(P(p.id) || p); } }
+function handleWriteError(e) {
+  const code = e && e.code;
+  if (code === "permission-denied") { setEditMode(false); toast("You don't have edit access. Ask Dave to add you."); }
+  else toast("A change did not save. Check your connection and try again.");
+}
+async function setHome(id) {
+  homeId = id;
+  if (store.mode === "fb" && !state.readOnly) { bump(1); try { await store.fdb.doc("meta/settings").set({ homeId: id }); } catch (e) { handleWriteError(e); } finally { bump(-1); } }
+}
+function setEditMode(on) {
+  state.readOnly = !on;
+  $("#firstBtn").style.display = on ? "" : "none";
+  render(); if (state.sel) buildPanel(); bump(0);
+}
+function authUI() {
+  const b = $("#authBtn"), u = store.user;
+  b.querySelector(".lbl").textContent = u ? (state.readOnly ? "Viewing" : "Editing") : "Sign in";
+  b.title = u ? "Signed in as " + u.email : "Family members sign in with Google";
+}
+function gate(kind) {
+  const g = $("#gate");
+  if (!kind) { g.classList.remove("show"); return; }
+  const u = store.user;
+  const sub = kind === "signin"
+    ? "This tree is private to the family. Sign in with the Google account Dave added."
+    : "You're signed in as " + (u && u.email) + ", but this account hasn't been added yet. Ask Dave to add it, then refresh.";
+  g.replaceChildren(h("div", { class: "gcard" },
+    h("h2", { text: "The Polonsky Family Tree" }),
+    h("p", { class: "muted", text: sub }),
+    kind === "signin"
+      ? h("button", { class: "btn primary big", onclick: signIn, text: "Sign in with Google" })
+      : h("button", { class: "btn", onclick: () => store.auth.signOut(), text: "Use a different account" })));
+  g.classList.add("show");
+}
+function signIn() {
+  const provider = new firebase.auth.GoogleAuthProvider();
+  provider.setCustomParameters({ prompt: "select_account" });
+  store.auth.signInWithPopup(provider).catch(e => { if (e && e.code !== "auth/popup-closed-by-user" && e.code !== "auth/cancelled-popup-request") toast("Sign-in didn't work. Allow pop-ups for this site and try again."); });
+}
+let unsubs = [];
+function stopListeners() { unsubs.forEach(f => { try { f(); } catch {} }); unsubs = []; }
+function startListeners() {
+  stopListeners();
+  setSync("busy", "Loading");
+  let loaded = false;
+  const timer = setTimeout(() => { if (!loaded) banner("The tree can't be reached yet. It will appear when the connection returns."); }, 10000);
+  unsubs.push(store.fdb.collection("people").onSnapshot(snap => {
+    people.clear();
+    for (const d of snap.docs) people.set(d.id, { ...blank(d.id), ...d.data(), id: d.id });
+    if (!loaded) { loaded = true; clearTimeout(timer); banner(""); }
+    if (!pending) bump(0);
+    onData();
+  }, () => { clearTimeout(timer); banner("The tree could not be loaded. Refresh to try again."); setSync("local", "Offline"); }));
+  unsubs.push(store.fdb.doc("meta/settings").onSnapshot(s => { if (s.exists) { homeId = s.data().homeId || null; if (!state.focus && homeId && people.has(homeId)) onData(); } }, () => {}));
+}
+async function onAuth(u) {
+  store.user = u;
+  stopListeners(); people.clear(); state.focus = null; world.replaceChildren(); closePanel();
+  if (!u) { state.readOnly = true; authUI(); setSync("local", "Signed out"); gate("signin"); return; }
+  const email = (u.email || "").toLowerCase();
+  let role = email === OWNER ? "editor" : null;
+  if (!role) { try { const d = await store.fdb.doc("members/" + email).get(); if (d.exists) role = d.data().role === "editor" ? "editor" : "viewer"; } catch {} }
+  if (!role) { state.readOnly = true; authUI(); setSync("local", "No access"); gate("denied"); return; }
+  gate(null);
+  state.readOnly = role !== "editor";
+  $("#firstBtn").style.display = state.readOnly ? "none" : "";
+  authUI();
+  startListeners();
+}
+async function openAccount() {
+  const u = store.user;
+  if (!u) return signIn();
+  const isOwner = (u.email || "").toLowerCase() === OWNER;
+  const list = h("div", { class: "mlist" });
+  const draw = async () => {
+    let rows = [];
+    try { const snap = await store.fdb.collection("members").get(); rows = snap.docs.map(d => ({ email: d.id, role: d.data().role || "viewer" })).sort((a, b) => a.email.localeCompare(b.email)); } catch {}
+    list.replaceChildren(...(rows.length ? rows.map(r => h("div", { class: "mrow" },
+      h("span", { class: "mem", text: r.email }),
+      h("span", { class: "muted", text: r.role === "editor" ? "Can edit" : "Can view" }),
+      h("button", { class: "btn small", text: r.role === "editor" ? "Make viewer" : "Make editor", onclick: async () => { await setMember(r.email, r.role === "editor" ? "viewer" : "editor"); draw(); } }),
+      h("button", { class: "btn small danger", text: "Remove", onclick: async () => { try { await store.fdb.doc("members/" + r.email).delete(); toast("Removed " + r.email); } catch { toast("Could not remove."); } draw(); } })))
+      : [h("div", { class: "muted", text: "No one added yet. Only you can see the tree." })]));
+  };
+  const inp = h("input", { id: "m-email", type: "email", placeholder: "their Google email", autocomplete: "off" });
+  let newRole = "viewer";
+  const seg = h("div", { class: "seg" });
+  const drawSeg = () => seg.replaceChildren(
+    h("button", { "aria-pressed": String(newRole === "viewer"), text: "Can view", onclick: () => { newRole = "viewer"; drawSeg(); } }),
+    h("button", { "aria-pressed": String(newRole === "editor"), text: "Can edit", onclick: () => { newRole = "editor"; drawSeg(); } }));
+  drawSeg();
+  dlg.replaceChildren(
+    h("h2", { text: isOwner ? "Family access" : "Your account" }),
+    h("div", { class: "muted", text: "Signed in as " + u.email + (state.readOnly ? ". You can view the tree." : ". You can edit the tree.") }),
+    isOwner ? h("div", {},
+      h("div", { class: "fld", style: "margin-top:6px" }, h("label", { text: "Who has access" }), list),
+      h("div", { class: "fld", style: "margin-top:14px" }, h("label", { for: "m-email", text: "Add someone" }), inp),
+      h("div", { style: "display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap" }, seg,
+        h("button", { class: "btn primary", text: "Add", onclick: async () => {
+          const em = inp.value.trim().toLowerCase();
+          if (!/^[^@\s\/]+@[^@\s\/]+\.[^@\s\/]+$/.test(em)) return toast("Enter a full email address.");
+          await setMember(em, newRole); inp.value = ""; draw(); } }))) : null,
+    h("div", { class: "acts" },
+      h("button", { class: "btn", text: "Copy tree as JSON", onclick: copyJson }),
+      h("button", { class: "btn", text: "Sign out", onclick: () => { store.auth.signOut(); closeModal(); } }),
+      h("button", { class: "btn primary", text: "Done", onclick: closeModal })));
+  modal.classList.add("show");
+  if (isOwner) draw();
+}
+async function setMember(email, role) {
+  try { await store.fdb.doc("members/" + email).set({ role, addedAt: new Date().toISOString() }); toast(email + (role === "editor" ? " can edit" : " can view")); }
+  catch (e) { toast("Could not save that change."); }
+}
+
+async function init() {
+  $("#firstBtn").style.display = "none";
+  if (!window.firebase) { banner("The tree could not load. Check your connection and refresh."); return; }
+  firebase.initializeApp(FB_CONFIG);
+  store.fdb = firebase.firestore(); store.auth = firebase.auth(); store.mode = "fb";
+  setSync("busy", "Connecting");
+  $("#authBtn").onclick = openAccount;
+  store.auth.onAuthStateChanged(onAuth);
+}
+
+let firstData = true;
+function onData() {
+  reindex();
+  $("#count").textContent = people.size + (people.size === 1 ? " person" : " people");
+  $("#empty").classList.toggle("show", people.size === 0 && store.mode !== "loading");
+  if (!people.size) { world.replaceChildren(); return; }
+  const hashId = decodeURIComponent(location.hash.slice(1));
+  if (!state.focus || !people.has(state.focus)) {
+    state.focus = people.has(hashId) ? hashId : (homeId && people.has(homeId) ? homeId : [...people.keys()][0]);
+    render(); centerOn(state.focus, false, true); firstData = false;
+  } else render();
+  if (state.sel && !people.has(state.sel)) closePanel();
+  else if (state.sel) refreshPanel();
+}
+
+/* ---------- layout ---------- */
+let L = null;
+function layout(fid) {
+  const nodes = [], paths = [];
+  const seg = (x1, y1, x2, y2, cls) => paths.push({ d: `M${x1} ${y1}L${x2} ${y2}`, cls });
+  const sibs = siblingsOf(fid), parts = partnersOf(fid);
+  const up = state.up, down = state.down;
+  sibs.forEach((s, i) => nodes.push({ id: s, x: -(sibs.length - i) * U, y: 0, role: "sib" }));
+  nodes.push({ id: fid, x: 0, y: 0, role: "focus" });
+  parts.forEach((p, i) => { nodes.push({ id: p, x: (i + 1) * U, y: 0, role: "partner" }); seg(i * U + CW / 2, 0, (i + 1) * U - CW / 2, 0, "couple"); });
+
+  // ancestors
+  const wMemo = new Map();
+  const W = (id, g) => { const k = id + "|" + g; if (wMemo.has(k)) return wMemo.get(k); const ps = g < up ? parentsOf(id) : []; const w = ps.length ? ps.reduce((a, p) => a + W(p, g + 1), 0) : 1; wMemo.set(k, w); return w; };
+  const place = (id, start, g) => {
+    const ps = g < up ? parentsOf(id) : [];
+    let x;
+    if (ps.length) {
+      let s = start;
+      const xs = ps.map(p => { const w = W(p, g + 1); const px = place(p, s, g + 1); s += w * U; return px; });
+      x = xs.reduce((a, b) => a + b, 0) / xs.length;
+      const py = -(g + 1) * RH;
+      if (xs.length === 2) { seg(xs[0] + CW / 2, py, xs[1] - CW / 2, py, "couple"); seg(x, py, x, -g * RH - CH / 2); }
+      else seg(x, py + CH / 2, x, -g * RH - CH / 2);
+    } else x = start + U / 2;
+    nodes.push({ id, x, y: -g * RH, role: "anc" });
+    return x;
+  };
+  const fpar = up >= 1 ? parentsOf(fid) : [];
+  if (fpar.length) {
+    const gc = sibs.length ? -sibs.length * U / 2 : 0;
+    const total = fpar.reduce((a, p) => a + W(p, 1), 0);
+    let s = gc - total * U / 2;
+    const xs = fpar.map(p => { const w = W(p, 1); const x = place(p, s, 1); s += w * U; return x; });
+    const pm = xs.reduce((a, b) => a + b, 0) / xs.length, py = -RH, busY = -RH / 2;
+    if (xs.length === 2) seg(xs[0] + CW / 2, py, xs[1] - CW / 2, py, "couple");
+    seg(pm, xs.length === 2 ? py : py + CH / 2, pm, busY);
+    const kx = [...sibs.map((_, i) => -(sibs.length - i) * U), 0];
+    seg(Math.min(pm, ...kx), busY, Math.max(pm, ...kx), busY);
+    kx.forEach(x => seg(x, busY, x, -CH / 2));
+  }
+
+  // descendants
+  const dMemo = new Map();
+  const DW = (id, g) => { const k = id + "|" + g; if (dMemo.has(k)) return dMemo.get(k); const own = partnersOf(id).length ? 2 : 1; const ks = g < down ? childrenOf(id) : []; const kw = ks.reduce((a, c) => a + DW(c, g + 1), 0); const w = Math.max(own, kw); dMemo.set(k, w); return w; };
+  const drop = (id, cx, fromY, y, g) => {
+    if (g >= down) return;
+    const ks = childrenOf(id); if (!ks.length) return;
+    const kw = ks.reduce((a, c) => a + DW(c, g + 1), 0);
+    let s = cx - kw * U / 2; const busY = y + RH / 2;
+    const kx = ks.map(c => { const w = DW(c, g + 1); const x = placeD(c, s, g + 1); s += w * U; return x; });
+    seg(cx, fromY, cx, busY);
+    seg(Math.min(cx, ...kx), busY, Math.max(cx, ...kx), busY);
+    kx.forEach(x => seg(x, busY, x, (g + 1) * RH - CH / 2));
+  };
+  const placeD = (id, start, g) => {
+    const w = DW(id, g), c = start + w * U / 2, y = g * RH, pt = partnersOf(id)[0];
+    let x = c;
+    if (pt) { x = c - U / 2; nodes.push({ id: pt, x: c + U / 2, y, role: "dpartner" }); seg(x + CW / 2, y, c + U / 2 - CW / 2, y, "couple"); }
+    nodes.push({ id, x, y, role: "desc" });
+    drop(id, pt ? c : x, pt ? y : y + CH / 2, y, g);
+    return x;
+  };
+  drop(fid, parts.length ? U / 2 : 0, parts.length ? 0 : CH / 2, 0, 0);
+
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  for (const n of nodes) { minX = Math.min(minX, n.x - CW / 2); maxX = Math.max(maxX, n.x + CW / 2); minY = Math.min(minY, n.y - CH / 2); maxY = Math.max(maxY, n.y + CH / 2); }
+  return { nodes, paths, ox: -minX + PAD, oy: -minY + PAD, w: maxX - minX + PAD * 2, h: maxY - minY + PAD * 2 };
+}
+
+/* ---------- render ---------- */
+const NS = "http://www.w3.org/2000/svg";
+function render() {
+  if (!state.focus || !people.has(state.focus)) return;
+  L = layout(state.focus);
+  world.style.width = L.w + "px"; world.style.height = L.h + "px";
+  const svg = document.createElementNS(NS, "svg");
+  svg.setAttribute("width", L.w); svg.setAttribute("height", L.h);
+  for (const p of L.paths) {
+    const el = document.createElementNS(NS, "path");
+    el.setAttribute("d", p.d.replace(/(-?\d+(\.\d+)?) (-?\d+(\.\d+)?)/g, (m, a, _, b) => (+a + L.ox) + " " + (+b + L.oy)));
+    if (p.cls) el.setAttribute("class", p.cls);
+    svg.append(el);
+  }
+  const frag = [svg];
+  for (const n of L.nodes) frag.push(card(n));
+  world.replaceChildren(...frag);
+}
+const ROLE_LABEL = { sib: "Sibling", partner: "Partner", dpartner: "Partner" };
+function card(n) {
+  const p = P(n.id);
+  const life = lifeLine(p);
+  const el = h("div", {
+    class: "card" + (n.role === "focus" ? " focus" : "") + (p.status === "research" ? " research" : ""),
+    style: `left:${n.x + L.ox - CW / 2}px;top:${n.y + L.oy - CH / 2}px`,
+    tabindex: "0", role: "button", "aria-label": fullName(p) + (life ? ", " + life : ""), "data-id": n.id
+  },
+    avatar(p),
+    h("div", { class: "tx" },
+      h("div", { class: "nm", text: fullName(p) }),
+      h("div", { class: "yr" + (life ? "" : " none"), text: life || "Dates unknown" }),
+      p.birthPlace ? h("div", { class: "pl", text: p.birthPlace }) : null),
+    h("i", { class: "dot " + (p.status || "research"), title: STATUS[p.status] || STATUS.research })
+  );
+  if (n.role === "focus" && !state.readOnly) {
+    el.append(
+      addBtn("up", "Add a parent", () => openAdd("parent", n.id)),
+      addBtn("down", "Add a child", () => openAdd("child", n.id)),
+      addBtn("right", "Add a partner", () => openAdd("partner", n.id)),
+      addBtn("left", "Add a sibling", () => openAdd("sibling", n.id)));
+  }
+  el.addEventListener("click", () => { if (suppress) return; select(n.id); });
+  el.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); select(n.id); } });
+  return el;
+}
+function addBtn(pos, label, fn) {
+  return h("button", { class: "add " + pos, "aria-label": label, title: label, onclick: e => { e.stopPropagation(); fn(); } }, h("span", { text: "+" }));
+}
+function select(id) {
+  const changed = state.focus !== id;
+  state.focus = id;
+  if (location.hash.slice(1) !== id) { try { location.hash = id; } catch {} }
+  const wasOpen = panel.classList.contains("open");
+  if (changed) render();
+  openPanel(id);
+  if (changed || !wasOpen) centerOn(id, true);
+}
+
+/* ---------- camera ---------- */
+const cam = { x: 0, y: 0, k: 1 };
+const panelW = () => (panel.classList.contains("open") && innerWidth > 760 ? 400 : 0);
+function applyCam(anim) { world.style.transition = anim ? "transform .5s cubic-bezier(.2,.7,.2,1)" : "none"; world.style.transform = `translate(${cam.x}px,${cam.y}px) scale(${cam.k})`; }
+function viewBox() { const top = 60, bottom = innerWidth <= 760 && panel.classList.contains("open") ? innerHeight * 0.6 : 64; return { x: 0, y: top, w: innerWidth - panelW(), h: innerHeight - top - bottom }; }
+function centerOn(id, anim, fitScale) {
+  if (!L) return;
+  const n = L.nodes.find(n => n.id === id && n.role === "focus") || L.nodes.find(n => n.id === id);
+  if (!n) return;
+  const v = viewBox();
+  if (fitScale) cam.k = Math.max(0.42, Math.min(1, v.w / L.w, v.h / L.h));
+  // Aim at the middle of the visible family, then nudge so the focus card stays on screen.
+  const k = cam.k, fx = (n.x + L.ox) * k, fy = (n.y + L.oy) * k, m = 24;
+  let x = v.x + v.w / 2 - (L.w / 2) * k, y = v.y + v.h / 2 - (L.h / 2) * k;
+  if (L.w * k > v.w) x = Math.min(Math.max(x, v.x + m + CW * k / 2 - fx), v.x + v.w - m - CW * k / 2 - fx);
+  if (L.h * k > v.h) y = Math.min(Math.max(y, v.y + m + CH * k / 2 - fy), v.y + v.h - m - CH * k / 2 - fy);
+  cam.x = x; cam.y = y;
+  applyCam(anim);
+}
+function fit() {
+  if (!L) return; const v = viewBox();
+  cam.k = Math.max(0.15, Math.min(1.2, v.w / L.w, v.h / L.h));
+  cam.x = v.x + (v.w - L.w * cam.k) / 2; cam.y = v.y + (v.h - L.h * cam.k) / 2; applyCam(true);
+}
+function zoomAt(mx, my, nk) { nk = Math.max(0.15, Math.min(2.5, nk)); cam.x = mx - (mx - cam.x) * nk / cam.k; cam.y = my - (my - cam.y) * nk / cam.k; cam.k = nk; }
+vp.addEventListener("wheel", e => { e.preventDefault(); zoomAt(e.clientX, e.clientY, cam.k * Math.exp(-e.deltaY * (e.ctrlKey ? 0.01 : 0.0018))); applyCam(false); }, { passive: false });
+const pts = new Map(); let start = null, suppress = false, moved = false;
+vp.addEventListener("pointerdown", e => {
+  if (e.target.closest("button,input,textarea,a")) return;
+  pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  start = { cam: { ...cam }, pts: new Map([...pts].map(([k, v]) => [k, { ...v }])) };
+  moved = false;
+});
+addEventListener("pointermove", e => {
+  if (!pts.has(e.pointerId)) return;
+  pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  const arr = [...pts.values()], s0 = [...start.pts.values()];
+  if (arr.length === 1 && s0.length >= 1) {
+    const dx = arr[0].x - s0[0].x, dy = arr[0].y - s0[0].y;
+    if (!moved && Math.hypot(dx, dy) < 6) return;
+    moved = true; vp.classList.add("drag");
+    cam.x = start.cam.x + dx; cam.y = start.cam.y + dy; cam.k = start.cam.k; applyCam(false);
+  } else if (arr.length >= 2 && s0.length >= 2) {
+    moved = true;
+    const d0 = Math.hypot(s0[0].x - s0[1].x, s0[0].y - s0[1].y) || 1, d1 = Math.hypot(arr[0].x - arr[1].x, arr[0].y - arr[1].y);
+    const m0 = { x: (s0[0].x + s0[1].x) / 2, y: (s0[0].y + s0[1].y) / 2 }, m1 = { x: (arr[0].x + arr[1].x) / 2, y: (arr[0].y + arr[1].y) / 2 };
+    const nk = Math.max(0.15, Math.min(2.5, start.cam.k * d1 / d0));
+    cam.k = nk; cam.x = m1.x - (m0.x - start.cam.x) * nk / start.cam.k; cam.y = m1.y - (m0.y - start.cam.y) * nk / start.cam.k; applyCam(false);
+  }
+});
+const endPtr = e => {
+  if (!pts.has(e.pointerId)) return;
+  pts.delete(e.pointerId); vp.classList.remove("drag");
+  if (moved) { suppress = true; setTimeout(() => suppress = false, 0); }
+  start = { cam: { ...cam }, pts: new Map([...pts].map(([k, v]) => [k, { ...v }])) };
+};
+addEventListener("pointerup", endPtr); addEventListener("pointercancel", endPtr);
+addEventListener("resize", () => { if (state.focus) centerOn(state.focus, false); });
+
+/* ---------- controls ---------- */
+function setGen(k, d) {
+  state[k] = Math.max(0, Math.min(8, state[k] + d));
+  $("#upVal").textContent = state.up; $("#dnVal").textContent = state.down;
+  try { localStorage.setItem("ft.view", JSON.stringify({ up: state.up, down: state.down })); } catch {}
+  render(); centerOn(state.focus, true);
+}
+$("#upVal").textContent = state.up; $("#dnVal").textContent = state.down;
+$("#upMinus").onclick = () => setGen("up", -1); $("#upPlus").onclick = () => setGen("up", 1);
+$("#dnMinus").onclick = () => setGen("down", -1); $("#dnPlus").onclick = () => setGen("down", 1);
+$("#zIn").onclick = () => { const v = viewBox(); zoomAt(v.x + v.w / 2, v.y + v.h / 2, cam.k * 1.25); applyCam(true); };
+$("#zOut").onclick = () => { const v = viewBox(); zoomAt(v.x + v.w / 2, v.y + v.h / 2, cam.k / 1.25); applyCam(true); };
+$("#zFit").onclick = fit;
+$("#homeBtn").onclick = () => { const id = homeId && people.has(homeId) ? homeId : state.focus; if (!id) return; state.focus = id; render(); centerOn(id, true, true); closePanel(); };
+$("#firstBtn").onclick = () => openAdd("first", null);
+addEventListener("hashchange", () => { const id = decodeURIComponent(location.hash.slice(1)); if (people.has(id) && id !== state.focus) { state.focus = id; render(); centerOn(id, true); if (state.sel) openPanel(id); } });
+
+// search
+const q = $("#q"), results = $("#results");
+function matches(term) {
+  term = term.trim().toLowerCase(); if (!term) return [];
+  return [...people.values()].filter(p => [p.given, p.surname, p.birthSurname, p.aka, p.birthPlace].join(" ").toLowerCase().includes(term))
+    .sort((a, b) => fullName(a).localeCompare(fullName(b))).slice(0, 12);
+}
+q.addEventListener("input", () => {
+  const list = matches(q.value);
+  results.replaceChildren(...(list.length ? list.map(p => h("button", { role: "option", onclick: () => { q.value = ""; results.classList.remove("show"); select(p.id); } },
+    avatar(p), h("div", {}, h("div", { text: fullName(p) }), h("div", { class: "meta", text: [lifeLine(p), p.birthPlace].filter(Boolean).join(" · ") || "No dates yet" }))))
+    : [h("div", { class: "muted", style: "padding:10px", text: "No one by that name yet." })]));
+  results.classList.toggle("show", !!q.value.trim());
+});
+q.addEventListener("keydown", e => { if (e.key === "Enter") { const m = matches(q.value)[0]; if (m) { q.value = ""; results.classList.remove("show"); select(m.id); } } if (e.key === "Escape") { q.value = ""; results.classList.remove("show"); } });
+document.addEventListener("click", e => { if (!e.target.closest(".search")) results.classList.remove("show"); });
+
+/* ---------- panel ---------- */
+function openPanel(id) { state.sel = id; panel.classList.add("open"); buildPanel(); }
+function closePanel() { const was = panel.classList.contains("open"); state.sel = null; panel.classList.remove("open"); if (was && state.focus && L) centerOn(state.focus, true); }
+const saveTimers = new Map();
+function scheduleSave(id) {
+  clearTimeout(saveTimers.get(id));
+  saveTimers.set(id, setTimeout(async () => { const p = P(id); if (!p) return; await put(p); flashSaved(); }, 500));
+}
+function flashSaved() { const s = panel.querySelector(".saved"); if (!s) return; s.classList.add("show"); setTimeout(() => s.classList.remove("show"), 1400); }
+let renderT;
+function softRender() { clearTimeout(renderT); renderT = setTimeout(render, 250); }
+
+function field(p, key, label, opts = {}) {
+  const id = "f-" + key;
+  const input = opts.area ? h("textarea", { id, placeholder: opts.ph || "" }) : h("input", { id, type: "text", placeholder: opts.ph || "", autocomplete: "off" });
+  input.value = p[key] || "";
+  input.disabled = state.readOnly;
+  input.addEventListener("input", () => { const cur = P(p.id); if (!cur) return; cur[key] = input.value; scheduleSave(p.id); softRender(); if (key === "given" || key === "surname" || key.startsWith("birth") || key.startsWith("death")) updateHead(); });
+  return h("div", { class: "fld" + (opts.full ? " full" : "") }, h("label", { for: id, text: label }), input);
+}
+function updateHead() {
+  const p = P(state.sel); if (!p) return;
+  const t = panel.querySelector(".p-head h2"); if (t) t.textContent = fullName(p);
+  const s = panel.querySelector(".p-head .sub"); if (s) s.textContent = subLine(p);
+}
+function subLine(p) { return [lifeLine(p), p.birthSurname ? "née " + p.birthSurname : "", p.aka ? "aka " + p.aka : ""].filter(Boolean).join(" · ") || "No dates yet"; }
+
+function buildPanel() {
+  const p = P(state.sel); if (!p) return closePanel();
+  const big = avatar(p, "big");
+  const head = h("div", { class: "p-head" },
+    h("div", {}, big, photoControls(p)),
+    h("div", { style: "min-width:0" }, h("h2", { text: fullName(p) }), h("div", { class: "sub", text: subLine(p) })),
+    h("button", { class: "x", "aria-label": "Close details", onclick: closePanel, text: "×" }));
+  const statusSeg = h("div", { class: "seg", role: "group", "aria-label": "How sure are we" },
+    Object.entries(STATUS).map(([k, label]) => h("button", { "aria-pressed": String((p.status || "research") === k), disabled: state.readOnly, onclick: async () => { const cur = P(p.id); cur.status = k; render(); buildPanel(); await put(cur); flashSaved(); } }, h("i", { class: "dot " + k }), label)));
+  const living = h("input", { type: "checkbox", id: "f-living", disabled: state.readOnly });
+  living.checked = !!p.living;
+  living.addEventListener("change", () => { const cur = P(p.id); cur.living = living.checked; scheduleSave(p.id); });
+  const bodyEl = h("div", { class: "p-body" },
+    h("div", { class: "sec" }, h("h3", {}, "How sure are we", h("span", { class: "saved", text: "Saved" })), statusSeg),
+    h("div", { class: "sec" }, h("h3", { text: "Name" }), h("div", { class: "grid2" },
+      field(p, "given", "Given names"), field(p, "surname", "Surname"),
+      field(p, "birthSurname", "Birth surname", { ph: "Maiden or original name" }), field(p, "aka", "Also known as", { ph: "Nicknames, Hebrew name" }))),
+    h("div", { class: "sec" }, h("h3", { text: "Born" }), h("div", { class: "grid2" },
+      field(p, "birthDate", "Date", { ph: "e.g. 12 Jan 1927 or abt 1882" }), field(p, "birthPlace", "Place", { ph: "Town, region, country" }))),
+    h("div", { class: "sec" }, h("h3", { text: "Died" }), h("div", { class: "grid2" },
+      field(p, "deathDate", "Date", { ph: "Leave blank if unknown" }), field(p, "deathPlace", "Place")),
+      h("label", { class: "chk", for: "f-living" }, living, "Living")),
+    h("div", { class: "sec" }, h("h3", { text: "Family" }), familyBlock(p)),
+    h("div", { class: "sec" }, h("h3", { text: "Story" }), h("div", { class: "grid2" },
+      field(p, "notes", "Stories and notes", { area: true, full: true, ph: "What the family remembers" }),
+      field(p, "sources", "Sources", { area: true, full: true, ph: "Records, recordings, who told us" }))),
+    h("div", { class: "sec" }, h("h3", { text: "More" }), h("div", { class: "addrow" },
+      h("button", { class: "btn", onclick: async () => { await setHome(p.id); toast(fullName(p) + " is now the home person."); }, disabled: state.readOnly, text: homeId === p.id ? "Home person" : "Make home person" }),
+      h("button", { class: "btn", onclick: copyJson, text: "Copy tree as JSON" }),
+      deleteBtn(p)))
+  );
+  panel.replaceChildren(head, bodyEl);
+}
+function refreshPanel() {
+  // Keep inputs the user is typing in; refresh everything else from the latest data.
+  const p = P(state.sel); if (!p) return;
+  for (const k of FIELDS) { const el = panel.querySelector("#f-" + k); if (el && el !== document.activeElement && el.value !== (p[k] || "")) el.value = p[k] || ""; }
+  updateHead();
+  const fam = panel.querySelector(".fam"); if (fam) fam.replaceWith(familyBlock(p));
+}
+function photoControls(p) {
+  if (state.readOnly) return null;
+  const file = h("input", { type: "file", accept: "image/*", style: "display:none", id: "photoIn" });
+  file.addEventListener("change", () => { if (file.files[0]) uploadPhoto(p.id, file.files[0]); });
+  const hasPhoto = !!photoSrc(p);
+  return h("div", { class: "photoacts" }, file,
+    h("button", { class: "btn small", onclick: () => file.click(), text: hasPhoto ? "Change" : "Add photo" }),
+    hasPhoto ? h("button", { class: "btn small", onclick: async () => { const cur = P(p.id); cur.photoId = ""; cur.photoData = ""; render(); buildPanel(); await put(cur); }, text: "Remove" }) : null);
+}
+async function shrink(fileObj, max) {
+  const bmp = await createImageBitmap(fileObj);
+  const s = Math.min(1, max / Math.max(bmp.width, bmp.height));
+  const c = document.createElement("canvas"); c.width = Math.round(bmp.width * s); c.height = Math.round(bmp.height * s);
+  c.getContext("2d").drawImage(bmp, 0, 0, c.width, c.height);
+  return c;
+}
+async function uploadPhoto(id, f) {
+  try {
+    toast("Adding photo");
+    const cur = P(id);
+    if (false) {
+      const c = await shrink(f, 900);
+      const blob = await new Promise(r => c.toBlob(r, "image/jpeg", 0.86));
+      const res = await store.assets.upload(blob);
+      cur.photoId = res.id; cur.photoData = "";
+    } else {
+      const c = await shrink(f, 480);
+      cur.photoData = c.toDataURL("image/jpeg", 0.82); cur.photoId = "";
+    }
+    render(); buildPanel(); await put(cur); toast("Photo added");
+  } catch (e) { toast("That photo could not be added. Try a JPG or PNG under 20 MB."); }
+}
+function familyBlock(p) {
+  const groups = [
+    ["Parents", parentsOf(p.id), "parent"],
+    ["Partners", partnersOf(p.id), "partner"],
+    ["Children", childrenOf(p.id), "child"],
+    ["Siblings", siblingsOf(p.id), null]
+  ];
+  return h("div", { class: "fam" },
+    groups.map(([lab, ids, kind]) => h("div", { class: "rel" }, h("div", { class: "lab", text: lab }),
+      ids.length ? h("div", { class: "chips" }, ids.map(o => relChip(p.id, o, kind))) : h("div", { class: "muted", text: "None added" }))),
+    state.readOnly ? null : h("div", { class: "addrow" },
+      h("button", { class: "btn", onclick: () => openAdd("parent", p.id), text: "+ Parent" }),
+      h("button", { class: "btn", onclick: () => openAdd("partner", p.id), text: "+ Partner" }),
+      h("button", { class: "btn", onclick: () => openAdd("child", p.id), text: "+ Child" }),
+      h("button", { class: "btn", onclick: () => openAdd("sibling", p.id), text: "+ Sibling" })));
+}
+function relChip(self, other, kind) {
+  const o = P(other);
+  const chip = h("span", { class: "chip" }, h("button", { onclick: () => select(other), text: fullName(o) }));
+  if (kind && !state.readOnly) {
+    const un = h("button", { class: "un", "aria-label": "Remove link to " + fullName(o), text: "×" });
+    un.onclick = () => {
+      chip.classList.add("confirm");
+      chip.replaceChildren(h("button", { text: "Unlink " + (o.given || fullName(o)) + "?", onclick: () => unlink(self, other, kind) }), h("button", { class: "un", text: "Keep", onclick: () => { const f = panel.querySelector(".fam"); f && f.replaceWith(familyBlock(P(self))); } }));
+    };
+    chip.append(un);
+  }
+  return chip;
+}
+async function unlink(self, other, kind) {
+  const a = P(self), b = P(other); const changed = [];
+  if (kind === "parent") { a.parents = (a.parents || []).filter(x => x !== other); changed.push(a); }
+  if (kind === "child") { b.parents = (b.parents || []).filter(x => x !== self); changed.push(b); }
+  if (kind === "partner") { a.partners = (a.partners || []).filter(x => x !== other); b.partners = (b.partners || []).filter(x => x !== self); changed.push(a, b); }
+  reindex(); render(); refreshPanel(); await putAll(changed); toast("Link removed");
+}
+function deleteBtn(p) {
+  if (state.readOnly) return null;
+  const b = h("button", { class: "btn danger", text: "Delete person" });
+  b.onclick = () => {
+    if (b.dataset.armed) return removePerson(p.id);
+    b.dataset.armed = "1"; b.textContent = "Tap again to delete " + (p.given || "this person");
+    setTimeout(() => { if (b.isConnected) { delete b.dataset.armed; b.textContent = "Delete person"; } }, 4000);
+  };
+  return b;
+}
+async function removePerson(id) {
+  const changed = [];
+  for (const o of people.values()) {
+    if (o.id === id) continue;
+    let ch = false;
+    if ((o.parents || []).includes(id)) { o.parents = o.parents.filter(x => x !== id); ch = true; }
+    if ((o.partners || []).includes(id)) { o.partners = o.partners.filter(x => x !== id); ch = true; }
+    if (ch) changed.push(o);
+  }
+  const name = fullName(P(id));
+  const next = parentsOf(id)[0] || partnersOf(id)[0] || childrenOf(id)[0] || [...people.keys()].find(k => k !== id);
+  await del(id);
+  reindex();
+  closePanel();
+  if (next) { state.focus = next; render(); centerOn(next, true); } else onData();
+  await putAll(changed);
+  toast(name + " was deleted");
+}
+async function copyJson() {
+  const data = JSON.stringify({ homeId, people: [...people.values()] }, null, 2);
+  try { await navigator.clipboard.writeText(data); toast("Copied the whole tree"); } catch { toast("Copy was blocked by this browser"); }
+}
+
+/* ---------- add / link dialog ---------- */
+const modal = $("#modal"), dlg = $("#dlg");
+function closeModal() { modal.classList.remove("show"); }
+modal.addEventListener("click", e => { if (e.target === modal) closeModal(); });
+addEventListener("keydown", e => { if (e.key === "Escape" && modal.classList.contains("show")) closeModal(); });
+const KIND = { parent: "parent", child: "child", partner: "partner", sibling: "sibling", first: "person" };
+function openAdd(kind, id) {
+  if (state.readOnly) return toast("You can view this tree but not edit it.");
+  const p = id ? P(id) : null;
+  if (kind === "parent" && parentsOf(id).length >= 2) return toast(fullName(p) + " already has two parents.");
+  if (kind === "sibling" && !parentsOf(id).length) return toast("Add a parent first. Siblings share a parent in the tree.");
+  let tab = "new", picked = null;
+  const title = kind === "first" ? "Add the first person" : `Add ${kind === "parent" ? "a parent" : kind === "child" ? "a child" : kind === "partner" ? "a partner" : "a sibling"}`;
+  const sub = p ? `${kind[0].toUpperCase() + kind.slice(1)} of ${fullName(p)}` : "You can add details after.";
+  const draw = () => {
+    const tabs = kind === "first" ? null : h("div", { class: "seg tabs" },
+      h("button", { "aria-pressed": String(tab === "new"), onclick: () => { tab = "new"; draw(); }, text: "New person" }),
+      h("button", { "aria-pressed": String(tab === "link"), onclick: () => { tab = "link"; draw(); }, text: "Already in the tree" }));
+    let content;
+    if (tab === "new") {
+      content = h("div", { class: "grid2" },
+        mf("a-given", "Given names"), mf("a-surname", "Surname"), mf("a-bdate", "Birth date", "e.g. abt 1882"), mf("a-bplace", "Birth place"));
+    } else {
+      const sIn = h("input", { type: "search", id: "a-find", placeholder: "Type a name", autocomplete: "off" });
+      const list = h("div", { class: "pick" });
+      const exclude = new Set([id, ...parentsOf(id), ...partnersOf(id), ...childrenOf(id)]);
+      const fill = () => {
+        const term = sIn.value.trim().toLowerCase();
+        const items = [...people.values()].filter(x => !exclude.has(x.id) && (!term || fullName(x).toLowerCase().includes(term) || (x.birthSurname || "").toLowerCase().includes(term))).sort((a, b) => fullName(a).localeCompare(fullName(b))).slice(0, 40);
+        list.replaceChildren(...(items.length ? items.map(x => h("button", { "aria-pressed": String(picked === x.id), onclick: () => { picked = x.id; fill(); } }, avatar(x), h("div", {}, h("div", { text: fullName(x) }), h("div", { class: "muted", text: lifeLine(x) || "No dates yet" })))) : [h("div", { class: "muted", text: "No match." })]));
+      };
+      sIn.addEventListener("input", fill); fill();
+      content = h("div", { class: "fld" }, h("label", { for: "a-find", text: "Find someone" }), sIn, list);
+      setTimeout(() => sIn.focus(), 30);
+    }
+    let otherSel = null;
+    if (kind === "child") {
+      const parts = partnersOf(id);
+      if (parts.length) {
+        otherSel = parts[0];
+        const seg = h("div", { class: "seg" });
+        const drawSeg = () => seg.replaceChildren(...[...parts, ""].map(o => h("button", { "aria-pressed": String(otherSel === (o || null)), onclick: () => { otherSel = o || null; drawSeg(); }, text: o ? fullName(P(o)) : "Not listed" })));
+        drawSeg();
+        content = h("div", {}, content, h("div", { class: "fld", style: "margin-top:12px" }, h("label", { text: "Other parent" }), seg));
+      }
+    }
+    dlg.replaceChildren(
+      h("h2", { text: title }), h("div", { class: "muted", text: sub }), tabs, content,
+      h("div", { class: "acts" },
+        h("button", { class: "btn", onclick: closeModal, text: "Cancel" }),
+        h("button", { class: "btn primary", onclick: () => submit(otherSel), text: tab === "new" ? "Add" : "Link" })));
+    if (tab === "new") setTimeout(() => $("#a-given")?.focus(), 30);
+  };
+  const submit = async (otherParent) => {
+    let target;
+    if (tab === "new") {
+      const given = $("#a-given").value.trim(), surname = $("#a-surname").value.trim();
+      if (!given && !surname) { $("#a-given").focus(); return toast("Add at least a first name or surname."); }
+      target = blank(newId(given + " " + surname));
+      Object.assign(target, { given, surname, birthDate: $("#a-bdate").value.trim(), birthPlace: $("#a-bplace").value.trim() });
+      people.set(target.id, target);
+    } else {
+      if (!picked) return toast("Pick someone from the list.");
+      target = P(picked);
+    }
+    const changed = [target];
+    if (kind !== "first") {
+      const p = P(id); changed.push(p);
+      if (kind === "parent") {
+        if (parentsOf(id).length >= 2) return toast("Already has two parents.");
+        const existing = parentsOf(id)[0];
+        p.parents = [...parentsOf(id), target.id];
+        if (existing && !(target.partners || []).includes(existing)) { target.partners = [...(target.partners || []), existing]; const ep = P(existing); ep.partners = [...(ep.partners || []), target.id]; changed.push(ep); }
+      } else if (kind === "partner") {
+        if (!(p.partners || []).includes(target.id)) p.partners = [...(p.partners || []), target.id];
+        if (!(target.partners || []).includes(id)) target.partners = [...(target.partners || []), id];
+      } else if (kind === "child") {
+        const ps = [id]; if (otherParent) ps.push(otherParent);
+        const keep = (target.parents || []).filter(x => !ps.includes(x));
+        target.parents = [...ps, ...keep].slice(0, 2);
+      } else if (kind === "sibling") {
+        if ((target.parents || []).length) { toast(fullName(target) + " already has parents. Link them through a parent instead."); return; }
+        target.parents = parentsOf(id).slice();
+      }
+    }
+    closeModal();
+    reindex();
+    if (kind === "first") { state.focus = target.id; $("#empty").classList.remove("show"); }
+    render();
+    if (kind === "first") centerOn(target.id, false, true);
+    $("#count").textContent = people.size + (people.size === 1 ? " person" : " people");
+    if (state.sel) refreshPanel();
+    await putAll(changed);
+    if (kind === "first") { if (!homeId) await setHome(target.id); select(target.id); }
+    toast(fullName(target) + (tab === "new" ? " added" : " linked"));
+  };
+  draw();
+  modal.classList.add("show");
+}
+function mf(id, label, ph) { return h("div", { class: "fld" }, h("label", { for: id, text: label }), h("input", { id, type: "text", placeholder: ph || "", autocomplete: "off" })); }
+
+init();
+})();
+</script>
+</body>
+</html>
