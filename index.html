@@ -206,6 +206,14 @@ header{position:fixed;top:0;left:0;right:0;z-index:30;display:flex;align-items:c
 .pill .vbtn[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink)}
 body.allview .pill.gen{display:none}
 @media (prefers-reduced-motion: reduce){*{transition:none!important}}
+a.btn{text-decoration:none;color:var(--ink);display:inline-flex;align-items:center}
+.lock{position:absolute;bottom:7px;right:7px;width:22px;height:22px;border:0;border-radius:50%;background:var(--bg);color:var(--muted);display:grid;place-items:center;padding:0;cursor:pointer}
+.lock svg{width:12px;height:12px}
+.note{background:#f3f0e6;border:1px solid #e4ddca;border-radius:10px;padding:10px 12px;font-size:13px;line-height:1.45;color:var(--ink);margin-bottom:12px}
+.note b{font-weight:600}
+.hint{font-size:12.5px;color:var(--muted);line-height:1.4;margin:6px 0 0 26px}
+.help ul{padding-left:18px;margin:10px 0}
+.help li{margin:7px 0;font-size:14px;line-height:1.45}
 </style>
 </head>
 <body>
@@ -219,6 +227,7 @@ body.allview .pill.gen{display:none}
     <div class="results" id="results" role="listbox"></div>
   </div>
   <button class="hbtn" id="homeBtn" title="Go to the home person"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11 12 4l9 7"/><path d="M5 10v10h14V10"/></svg><span class="lbl">Home</span></button>
+  <button class="hbtn" id="helpBtn" title="How the tree works" aria-label="How the tree works"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6v.6"/><circle cx="12" cy="17.2" r=".6" fill="currentColor"/></svg></button>
   <button class="hbtn" id="authBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg><span class="lbl">Sign in to edit</span></button>
   <div class="sync" id="sync"><i></i><span class="lbl">Connecting</span></div>
 </header>
@@ -265,6 +274,8 @@ body.allview .pill.gen{display:none}
 const U = 212, CW = 184, CH = 100, RH = 176, PAD = 120;
 const STATUS = { confirmed: "Documented", story: "Family story", research: "Needs research" };
 const FIELDS = ["given","surname","birthSurname","aka","birthDate","birthPlace","deathDate","deathPlace","notes","sources"];
+// Details that move to the private/<id> doc when a living person's details are private.
+const PRIV = ["aka","birthDate","birthPlace","deathDate","deathPlace","notes","sources","photoData","photoId"];
 const people = new Map();
 let homeId = null;
 const state = { focus: null, sel: null, up: 5, down: 2, readOnly: true, view: "focus" };
@@ -344,31 +355,65 @@ const FB_CONFIG = {
 };
 const OWNER = "davidpolonsky@gmail.com";
 const NOTIFY_URL = "https://script.google.com/macros/s/AKfycbyNkD1J8C8p22Q8OilUSTHyNQFr9Vz5mH3GwAHQ-K5xKt_M3IIVAfe-dCzcHMC5ZPZFKg/exec";
-const store = { mode: "loading", fdb: null, auth: null, user: null, editors: [], chains: new Map(), members: new Map(), myHome: null, myMember: null };
-function body(p) { const b = { ...p }; delete b.id; b.updatedAt = new Date().toISOString(); return b; }
+const store = { mode: "loading", fdb: null, auth: null, user: null, role: null, chains: new Map(), members: new Map(), myHome: null, myMember: null, prefs: {} };
+const privData = new Map(), privSubs = new Map();
+const myEmail = () => ((store.user && store.user.email) || "").toLowerCase();
+const myPid = () => (store.myMember && store.myMember.personId) || "";
+const claimsOf = p => (p && p.claimedBy) || [];
+const isMine = p => claimsOf(p).includes(myEmail());
+// Mirrors the database rules. The rules are what actually protect the data.
+function canEditCard(p) {
+  if (!store.user || !p) return false;
+  if (isOwnerUser() || isMine(p)) return true;
+  return store.role === "editor" && !claimsOf(p).length;
+}
+function isFamilyOf(id) {
+  const me = myPid(); if (!me) return false;
+  if (me === id) return true;
+  const p = P(id), m = P(me); if (!p || !m) return false;
+  const pp = p.parents || [], mp = m.parents || [];
+  return pp.includes(me) || (p.partners || []).includes(me) || mp.includes(id) || (m.partners || []).includes(id) || mp.some(x => pp.includes(x));
+}
+const canSeePrivate = id => isOwnerUser() || isFamilyOf(id);
+const hidden = p => !!(p && p.private && !p._privLoaded);
+const ownerNames = p => claimsOf(p).length ? (p.given || fullName(p)) : null;
+function body(p) {
+  const b = { ...p }; delete b.id;
+  for (const k of Object.keys(b)) if (k.startsWith("_")) delete b[k];
+  if (p.private) for (const k of PRIV) delete b[k];
+  b.updatedAt = new Date().toISOString(); return b;
+}
+function privBody(p) { const o = {}; for (const k of PRIV) o[k] = p[k] || ""; o.updatedAt = new Date().toISOString(); return o; }
 let pending = 0;
 function bump(d) { pending += d; if (store.mode === "fb") setSync(pending ? "busy" : "ok", pending ? "Saving" : (state.readOnly ? "View only" : "Saved")); }
 function put(p) {
   people.set(p.id, p);
-  if (store.mode !== "fb" || state.readOnly) return Promise.resolve();
+  if (store.mode !== "fb" || !store.user) return Promise.resolve();
   const prev = store.chains.get(p.id) || Promise.resolve();
-  const data = body(p);
+  const full = canEditCard(p);
+  // On a card someone else manages, only the family links can change.
+  const data = full ? body(p) : { parents: p.parents || [], partners: p.partners || [], unions: p.unions || {}, updatedAt: new Date().toISOString() };
+  const priv = full && p.private && p._privLoaded ? privBody(p) : null;
+  if (priv) privData.set(p.id, priv);
   bump(1);
-  const next = prev.then(() => store.fdb.collection("people").doc(p.id).set(data))
+  const ref = store.fdb.collection("people").doc(p.id);
+  const next = prev.then(async () => { if (full) await ref.set(data); else await ref.update(data); if (priv) await store.fdb.collection("private").doc(p.id).set(priv); })
     .catch(e => handleWriteError(e)).finally(() => bump(-1));
   store.chains.set(p.id, next);
   return next;
 }
 function del(id) {
+  const p = P(id);
   people.delete(id);
   if (store.mode !== "fb" || state.readOnly) return Promise.resolve();
   bump(1);
-  return store.fdb.collection("people").doc(id).delete().catch(handleWriteError).finally(() => bump(-1));
+  const go = async () => { if (p && p.private) await store.fdb.collection("private").doc(id).delete(); await store.fdb.collection("people").doc(id).delete(); };
+  return go().catch(handleWriteError).finally(() => bump(-1));
 }
 async function putAll(list) { const seen = new Set(); for (const p of list) { if (seen.has(p.id)) continue; seen.add(p.id); await put(p); } }
 function handleWriteError(e) {
   const code = e && e.code;
-  if (code === "permission-denied") { setEditMode(false); toast("You don't have edit access. Ask Dave to add you."); }
+  if (code === "permission-denied") toast("That change isn't allowed. Someone may manage that card themselves. Ask Dave if this looks wrong.");
   else toast("A change did not save. Check your connection and try again.");
 }
 async function setHome(id) {
@@ -406,22 +451,64 @@ function signIn() {
   store.auth.signInWithPopup(provider).catch(e => { if (e && e.code !== "auth/popup-closed-by-user" && e.code !== "auth/cancelled-popup-request") toast("Sign-in didn't work. Allow pop-ups for this site and try again."); });
 }
 let unsubs = [];
-function stopListeners() { unsubs.forEach(f => { try { f(); } catch {} }); unsubs = []; }
+function stopListeners() { unsubs.forEach(f => { try { f(); } catch {} }); unsubs = []; privSubs.forEach(f => { try { f(); } catch {} }); privSubs.clear(); }
+const rawDocs = new Map();
+function mergeDoc(id, data) {
+  rawDocs.set(id, data);
+  const pv = data.private ? privData.get(id) : null;
+  const p = { ...blank(id), ...data, id, ...(pv || {}), ...(pendingEdits.get(id) || {}) };
+  delete p.updatedAt;
+  p._privLoaded = !!pv;
+  return p;
+}
+function remergeAll() {
+  for (const [id, data] of rawDocs) if (people.has(id)) people.set(id, mergeDoc(id, data));
+  onData();
+}
+// Family members fetch each private card they're allowed to see, one at a time.
+function syncPrivSubs() {
+  if (isOwnerUser()) return;
+  for (const [id, off] of privSubs) { const p = P(id); if (!p || !p.private || !canSeePrivate(id)) { try { off(); } catch {} privSubs.delete(id); privData.delete(id); } }
+  for (const p of people.values()) {
+    if (!p.private || privSubs.has(p.id) || !canSeePrivate(p.id)) continue;
+    privSubs.set(p.id, store.fdb.collection("private").doc(p.id).onSnapshot(d => {
+      if (d.exists) privData.set(p.id, d.data()); else privData.delete(p.id);
+      remergeAll();
+    }, () => {}));
+  }
+}
+// A person with their own access manages their own card.
+let claimsSynced = false;
+async function syncClaims() {
+  if (claimsSynced || !people.size || !store.membersLoaded) return;
+  claimsSynced = true;
+  for (const [em, m] of store.members) {
+    const p = m.personId && P(m.personId);
+    if (p && !claimsOf(p).includes(em)) { try { await store.fdb.doc("people/" + p.id).update({ claimedBy: firebase.firestore.FieldValue.arrayUnion(em) }); } catch {} }
+  }
+}
 function startListeners() {
   stopListeners();
   setSync("busy", "Loading");
   let loaded = false;
   const timer = setTimeout(() => { if (!loaded) banner("The tree can't be reached yet. It will appear when the connection returns."); }, 10000);
   unsubs.push(store.fdb.collection("people").onSnapshot(snap => {
-    people.clear();
-    for (const d of snap.docs) people.set(d.id, { ...blank(d.id), ...d.data(), id: d.id, ...(pendingEdits.get(d.id) || {}) });
-    if (!loaded) { loaded = true; clearTimeout(timer); banner(""); }
+    people.clear(); rawDocs.clear();
+    for (const d of snap.docs) people.set(d.id, mergeDoc(d.id, d.data()));
+    if (isOwnerUser()) syncClaims();
+    syncPrivSubs();
+    if (!loaded) { loaded = true; clearTimeout(timer); banner(""); setTimeout(maybeWelcome, 600); }
     if (!pending) bump(0);
     onData();
   }, () => { clearTimeout(timer); banner("The tree could not be loaded. Refresh to try again."); setSync("local", "Offline"); }));
   unsubs.push(store.fdb.doc("meta/settings").onSnapshot(s => { if (s.exists) { homeId = s.data().homeId || null; if (!state.focus && homeId && people.has(homeId)) onData(); } }, () => {}));
+  if (isOwnerUser()) unsubs.push(store.fdb.collection("private").onSnapshot(snap => {
+    privData.clear(); for (const d of snap.docs) privData.set(d.id, d.data());
+    remergeAll();
+  }, () => {}));
   if (isOwnerUser()) unsubs.push(store.fdb.collection("members").onSnapshot(snap => {
-    store.members = new Map(snap.docs.map(d => [d.id, d.data()]));
+    store.members = new Map(snap.docs.map(d => [d.id, d.data()])); store.membersLoaded = true;
+    syncClaims();
     if (state.sel) { const a = panel.querySelector(".access"); if (a) a.replaceWith(accessBlock(P(state.sel))); }
   }, () => {}));
 }
@@ -431,11 +518,13 @@ async function onAuth(u) {
   if (!u) { state.readOnly = true; authUI(); setSync("local", "Signed out"); gate("signin"); return; }
   const email = (u.email || "").toLowerCase();
   let role = email === OWNER ? "editor" : null;
-  store.myMember = null; store.myHome = null; store.members = new Map();
-  if (!role) { try { const d = await store.fdb.doc("members/" + email).get(); if (d.exists) { store.myMember = d.data(); role = d.data().role === "editor" ? "editor" : "viewer"; } } catch {} }
-  try { const pf = await store.fdb.doc("prefs/" + email).get(); if (pf.exists) store.myHome = pf.data().homeId || null; } catch {}
+  store.myMember = null; store.myHome = null; store.members = new Map(); store.membersLoaded = false; claimsSynced = false; store.role = null; privData.clear();
+  try { const d = await store.fdb.doc("members/" + email).get(); if (d.exists) { store.myMember = d.data(); if (!role) role = d.data().role === "editor" ? "editor" : "viewer"; } } catch {}
+  store.prefs = {};
+  try { const pf = await store.fdb.doc("prefs/" + email).get(); if (pf.exists) { store.prefs = pf.data(); store.myHome = pf.data().homeId || null; } } catch {}
   if (!role) { state.readOnly = true; authUI(); setSync("local", "No access"); gate("denied"); return; }
   gate(null);
+  store.role = role;
   state.readOnly = role !== "editor";
   $("#firstBtn").style.display = state.readOnly ? "none" : "";
   authUI();
@@ -453,7 +542,8 @@ async function openAccount() {
       h("span", { class: "mem", text: r.email + (r.personId && P(r.personId) ? " (" + fullName(P(r.personId)) + ")" : "") }),
       h("span", { class: "muted", text: r.role === "editor" ? "Can edit" : "Can view" }),
       h("button", { class: "btn small", text: r.role === "editor" ? "Make viewer" : "Make editor", onclick: async () => { await setMember(r.email, r.role === "editor" ? "viewer" : "editor", r.personId); draw(); } }),
-      h("button", { class: "btn small danger", text: "Remove", onclick: async () => { try { await store.fdb.doc("members/" + r.email).delete(); toast("Removed " + r.email); } catch { toast("Could not remove."); } draw(); } })))
+      h("a", { class: "btn small", href: inviteLink(r.email, r.role, r.personId), text: "Invite email" }),
+      h("button", { class: "btn small danger", text: "Remove", onclick: async () => { await removeMember(r.email); draw(); } })))
       : [h("div", { class: "muted", text: "No one added yet. Only you can see the tree." })]));
   };
   const inp = h("input", { id: "m-email", type: "email", placeholder: "their Google email", autocomplete: "off" });
@@ -481,10 +571,35 @@ async function openAccount() {
   modal.classList.add("show");
   if (isOwner) draw();
 }
+function helpItems() {
+  const ed = !state.readOnly;
+  return [
+    ed ? "Tap anyone to see their card. Use the + buttons to add parents, partners, children and siblings." : "Tap anyone to see their card. Drag to move around, pinch or scroll to zoom.",
+    "Your own card is yours. Only you and Dave can change your details. Others can still link relatives to you.",
+    "Living people can keep their details private. Open the card and turn on \"Keep details private\". The name stays, so the tree stays connected.",
+    "Private details are visible only to that person, their close family (parents, partners, children, siblings) and Dave. A lock on a card means its details are private.",
+    "People who have died are shared family history, so their details are always visible.",
+    "Whole tree shows everyone at once. Home takes you back to your own starting card."];
+}
+function openHelp(first) {
+  dlg.replaceChildren(
+    h("h2", { text: first ? "Welcome to the family tree" : "How the tree works" }),
+    first ? h("div", { class: "muted", text: "A quick note before you start. You'll only see this once. The ? button at the top brings it back." }) : null,
+    h("div", { class: "help" }, h("ul", {}, helpItems().map(t => h("li", { text: t })))),
+    h("div", { class: "acts" }, h("button", { class: "btn primary", text: "Got it", onclick: closeModal })));
+  modal.classList.add("show");
+}
+async function maybeWelcome() {
+  if (!store.user || isOwnerUser() || store.prefs.welcomed || modal.classList.contains("show")) return;
+  openHelp(true);
+  store.prefs.welcomed = true;
+  try { await store.fdb.doc("prefs/" + myEmail()).set({ welcomed: true }, { merge: true }); } catch {}
+}
+$("#helpBtn").onclick = () => openHelp(false);
 function isOwnerUser() { return !!store.user && (store.user.email || "").toLowerCase() === OWNER; }
 async function setMyHome(id) {
   store.myHome = id;
-  try { await store.fdb.doc("prefs/" + (store.user.email || "").toLowerCase()).set({ homeId: id }); toast(fullName(P(id)) + " is now your home screen"); }
+  try { await store.fdb.doc("prefs/" + myEmail()).set({ homeId: id }, { merge: true }); toast(fullName(P(id)) + " is now your home screen"); }
   catch { toast("Could not save your home screen."); }
 }
 async function notifyAdded(personId, relation) {
@@ -509,7 +624,8 @@ function accessBlock(p) {
       h("span", { class: "mem", text: em }),
       h("span", { class: "muted", text: m.role === "editor" ? "Can contribute" : "Can view" }),
       h("button", { class: "btn small", text: m.role === "editor" ? "Make viewer" : "Let contribute", onclick: () => setMember(em, m.role === "editor" ? "viewer" : "editor", p.id) }),
-      h("button", { class: "btn small danger", text: "Remove", onclick: async () => { try { await store.fdb.doc("members/" + em).delete(); toast("Removed " + em); } catch { toast("Could not remove."); } } }))))
+      h("a", { class: "btn small", href: inviteLink(em, m.role, p.id), text: "Invite email" }),
+      h("button", { class: "btn small danger", text: "Remove", onclick: () => removeMember(em) }))))
       : h("div", { class: "muted", text: (p.given || "This person") + " can't see the tree yet." }),
     h("div", { class: "fld", style: "margin-top:10px" }, h("label", { for: "acc-email", text: "Give access" }), inp),
     h("div", { style: "display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap" }, seg,
@@ -518,14 +634,39 @@ function accessBlock(p) {
         if (!/^[^@\s\/]+@[^@\s\/]+\.[^@\s\/]+$/.test(em)) return toast("Enter a full email address.");
         await setMember(em, role, p.id); inp.value = "";
       } })),
-    h("div", { class: "muted", style: "margin-top:8px", text: "They sign in at tree.polonsky.us with that Google account. Their home screen starts on " + (p.given || "their card") + "." }));
+    h("div", { class: "muted", style: "margin-top:8px", text: "After you give access, tap Invite email to send them a ready-made note. Their home screen starts on " + (p.given || "their card") + ", and they manage their own card from then on." }));
 }
 async function setMember(email, role, personId) {
   const prev = store.members.get(email) || {};
   const data = { role, addedAt: prev.addedAt || new Date().toISOString() };
   const pid = personId || prev.personId; if (pid) data.personId = pid;
-  try { await store.fdb.doc("members/" + email).set(data); toast(email + (role === "editor" ? " can contribute" : " can view")); }
-  catch (e) { toast("Could not save that change."); }
+  try {
+    await store.fdb.doc("members/" + email).set(data);
+    if (pid && P(pid)) await store.fdb.doc("people/" + pid).update({ claimedBy: firebase.firestore.FieldValue.arrayUnion(email) });
+    toast(email + (role === "editor" ? " can contribute" : " can view"));
+  } catch (e) { toast("Could not save that change."); }
+}
+async function removeMember(email) {
+  const m = store.members.get(email) || {};
+  try {
+    await store.fdb.doc("members/" + email).delete();
+    if (m.personId && P(m.personId)) await store.fdb.doc("people/" + m.personId).update({ claimedBy: firebase.firestore.FieldValue.arrayRemove(email) });
+    toast("Removed " + email);
+  } catch { toast("Could not remove."); }
+}
+function inviteLink(email, role, personId) {
+  const p = personId && P(personId), first = p && p.given ? p.given.split(" ")[0] : "";
+  const lines = [
+    "Hi" + (first ? " " + first : "") + ",",
+    "",
+    "I've added you to our family tree: https://tree.polonsky.us",
+    "",
+    "Sign in with Google using " + email + ". " + (role === "editor" ? "You can look around and add relatives, photos and stories." : "You can look around the whole tree."),
+    "",
+    p ? "Your own card is yours. Only you and I can change your details. If you'd rather keep your dates, places and photo private, open your card and turn on \"Keep details private\". Your name stays in the tree so everyone stays connected." : "Anyone living can keep their dates, places and photo private. Open the card and turn on \"Keep details private\".",
+    "",
+    "Dave"];
+  return "mailto:" + encodeURIComponent(email) + "?subject=" + encodeURIComponent("You're invited to our family tree") + "&body=" + encodeURIComponent(lines.join("\n"));
 }
 
 async function init() {
@@ -759,7 +900,7 @@ function render() {
 const ROLE_LABEL = { sib: "Sibling", partner: "Partner", dpartner: "Partner" };
 function card(n) {
   const p = P(n.id);
-  const life = lifeLine(p);
+  const life = lifeLine(p), hid = hidden(p);
   const el = h("div", {
     class: "card" + (n.role === "focus" || n.role === "allfocus" ? " focus" : "") + (p.status === "research" ? " research" : ""),
     style: `left:${n.x + L.ox - CW / 2}px;top:${n.y + L.oy - CH / 2}px`,
@@ -768,10 +909,11 @@ function card(n) {
     avatar(p),
     h("div", { class: "tx" },
       h("div", { class: "nm", text: fullName(p) }),
-      h("div", { class: "yr" + (life ? "" : " none"), text: life || "Dates unknown" }),
+      h("div", { class: "yr" + (life ? "" : " none"), text: life || (hid ? "Details private" : "Dates unknown") }),
       p.birthSurname && p.surname && p.birthSurname.trim().toLowerCase() !== p.surname.trim().toLowerCase() ? h("div", { class: "nee", text: "n\u00e9e " + p.birthSurname }) : null,
       p.birthPlace ? h("div", { class: "pl", text: p.birthPlace }) : null),
-    h("i", { class: "dot " + (p.status || "research"), title: STATUS[p.status] || STATUS.research })
+    h("i", { class: "dot " + (p.status || "research"), title: STATUS[p.status] || STATUS.research }),
+    p.private ? h("button", { class: "lock", "aria-label": "Why these details are private", title: privLine(p), onclick: e => { e.stopPropagation(); toast(privLine(p)); } }, lockSvg()) : null
   );
   if (n.role === "focus" && !state.readOnly) {
     el.append(
@@ -783,6 +925,11 @@ function card(n) {
   el.addEventListener("click", () => { if (suppress) return; select(n.id); });
   el.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); select(n.id); } });
   return el;
+}
+function lockSvg() { const d = document.createElement("span"); d.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>'; return d.firstChild; }
+function privLine(p) {
+  const nm = p.given || fullName(p);
+  return (hidden(p) ? "Details hidden. " : "Details private. ") + "Only " + nm + ", close family and Dave can see them.";
 }
 function addBtn(pos, label, fn) {
   return h("button", { class: "add " + pos, "aria-label": label, title: label, onclick: e => { e.stopPropagation(); fn(); } }, h("span", { text: "+" }));
@@ -908,12 +1055,12 @@ function field(p, key, label, opts = {}) {
   const id = "f-" + key;
   const input = opts.area ? h("textarea", { id, placeholder: opts.ph || "" }) : h("input", { id, type: "text", placeholder: opts.ph || "", autocomplete: "off" });
   input.value = p[key] || "";
-  input.disabled = state.readOnly;
+  input.disabled = !canEditCard(p);
   input.addEventListener("input", () => { const cur = P(p.id); if (!cur) return; cur[key] = input.value; pendingEdits.set(p.id, { ...(pendingEdits.get(p.id) || {}), [key]: input.value }); scheduleSave(p.id); softRender(); if (key === "given" || key === "surname" || key.startsWith("birth") || key.startsWith("death")) updateHead(); });
   return h("div", { class: "fld" + (opts.full ? " full" : "") }, h("label", { for: id, text: label }), input);
 }
 function focusField(k) { const el = panel.querySelector("#f-" + k); if (!el) return; el.focus(); setTimeout(() => el.scrollIntoView({ block: "center", behavior: "smooth" }), 250); }
-panel.addEventListener("focusin", e => { if (e.target.matches("input,textarea") && innerWidth <= 760) { panel.classList.add("typing"); setTimeout(() => e.target.scrollIntoView({ block: "center", behavior: "smooth" }), 300); } });
+panel.addEventListener("focusin", e => { if (e.target.matches("input:not([type=checkbox]),textarea") && innerWidth <= 760) { panel.classList.add("typing"); setTimeout(() => e.target.scrollIntoView({ block: "center", behavior: "smooth" }), 300); } });
 panel.addEventListener("focusout", () => setTimeout(() => { if (!panel.contains(document.activeElement)) panel.classList.remove("typing"); }, 150));
 function updateHead() {
   const p = P(state.sel); if (!p) return;
@@ -924,31 +1071,35 @@ function subLine(p) { return [lifeLine(p), p.birthSurname ? "née " + p.birthSur
 
 function buildPanel() {
   const p = P(state.sel); if (!p) return closePanel();
+  const ed = canEditCard(p), hid = hidden(p);
   const big = avatar(p, "big");
   const head = h("div", { class: "p-head" },
-    h("div", {}, big, photoControls(p)),
+    h("div", {}, big, hid ? null : photoControls(p)),
     h("div", { style: "min-width:0" },
-      h("h2", { class: state.readOnly ? "" : "editable", text: fullName(p), onclick: () => focusField("given") }),
-      h("div", { class: "sub", text: subLine(p) }),
-      state.readOnly ? null : h("button", { class: "ename", text: "Edit name", onclick: () => focusField("surname") })),
+      h("h2", { class: ed ? "editable" : "", text: fullName(p), onclick: () => ed && focusField("given") }),
+      h("div", { class: "sub", text: hid ? "Details private" : subLine(p) }),
+      ed ? h("button", { class: "ename", text: "Edit name", onclick: () => focusField("surname") }) : null),
     h("button", { class: "x", "aria-label": "Close details", onclick: closePanel, text: "×" }));
   const statusSeg = h("div", { class: "seg", role: "group", "aria-label": "How sure are we" },
-    Object.entries(STATUS).map(([k, label]) => h("button", { "aria-pressed": String((p.status || "research") === k), disabled: state.readOnly, onclick: async () => { const cur = P(p.id); cur.status = k; render(); buildPanel(); await put(cur); flashSaved(); } }, h("i", { class: "dot " + k }), label)));
-  const living = h("input", { type: "checkbox", id: "f-living", disabled: state.readOnly });
+    Object.entries(STATUS).map(([k, label]) => h("button", { "aria-pressed": String((p.status || "research") === k), disabled: !ed, onclick: async () => { const cur = P(p.id); cur.status = k; render(); buildPanel(); await put(cur); flashSaved(); } }, h("i", { class: "dot " + k }), label)));
+  const living = h("input", { type: "checkbox", id: "f-living", disabled: !ed || (p.private && p.living) });
   living.checked = !!p.living;
   living.addEventListener("change", () => { const cur = P(p.id); cur.living = living.checked; scheduleSave(p.id); });
   const bodyEl = h("div", { class: "p-body" },
+    ownerNote(p),
     h("div", { class: "sec" }, h("h3", {}, "How sure are we", h("span", { class: "saved", text: "Saved" })), statusSeg),
     h("div", { class: "sec" }, h("h3", { text: "Name" }), h("div", { class: "grid2" },
       field(p, "given", "Given names"), field(p, "surname", "Surname"),
-      field(p, "birthSurname", "Maiden name (n\u00e9e)", { ph: "Surname at birth" }), field(p, "aka", "Also known as", { ph: "Nicknames, Hebrew name" }))),
+      field(p, "birthSurname", "Maiden name (n\u00e9e)", { ph: "Surname at birth" }), hid ? null : field(p, "aka", "Also known as", { ph: "Nicknames, Hebrew name" }))),
+    hid ? h("div", { class: "sec" }, h("div", { class: "note" }, lockSvgInline(), " ", privLine(p))) : [
     h("div", { class: "sec" }, h("h3", { text: "Born" }), h("div", { class: "grid2" },
       field(p, "birthDate", "Date", { ph: "e.g. 12 Jan 1927 or abt 1882" }), field(p, "birthPlace", "Place", { ph: "Town, region, country" }))),
     h("div", { class: "sec" }, h("h3", { text: "Died" }), h("div", { class: "grid2" },
       field(p, "deathDate", "Date", { ph: "Leave blank if unknown" }), field(p, "deathPlace", "Place")),
-      h("label", { class: "chk", for: "f-living" }, living, "Living")),
+      h("label", { class: "chk", for: "f-living" }, living, "Living"))],
+    privacyBlock(p),
     h("div", { class: "sec" }, h("h3", { text: "Family" }), familyBlock(p)),
-    h("div", { class: "sec" }, h("h3", { text: "Story" }), h("div", { class: "grid2" },
+    hid ? null : h("div", { class: "sec" }, h("h3", { text: "Story" }), h("div", { class: "grid2" },
       field(p, "notes", "Stories and notes", { area: true, full: true, ph: "What the family remembers" }),
       field(p, "sources", "Sources", { area: true, full: true, ph: "Records, recordings, who told us" }))),
     accessBlock(p),
@@ -959,16 +1110,70 @@ function buildPanel() {
       deleteBtn(p)))
   );
   panel.replaceChildren(head, bodyEl);
+  panel.dataset.hid = hid ? "1" : "0"; panel.dataset.priv = p.private ? "1" : "0"; panel.dataset.ed = ed ? "1" : "0";
+}
+function lockSvgInline() { const s = lockSvg(); s.setAttribute("style", "width:13px;height:13px;vertical-align:-2px"); return s; }
+function ownerNote(p) {
+  if (isMine(p)) return h("div", { class: "note" }, h("b", { text: "This is you. " }), "Only you and Dave can change your details. Family can still link relatives to you.");
+  if (claimsOf(p).length && !isOwnerUser()) return h("div", { class: "note" }, h("b", { text: ownerNames(p) + " manages this card. " }), state.readOnly ? "Only " + ownerNames(p) + " and Dave can change it." : "You can link relatives, but only " + ownerNames(p) + " and Dave can change the details.");
+  if (claimsOf(p).length && isOwnerUser()) return h("div", { class: "note" }, h("b", { text: ownerNames(p) + " manages this card. " }), "You can still change it as the admin.");
+  return null;
+}
+function privacyBlock(p) {
+  if (!p.living && !p.private) return null;
+  const ed = canEditCard(p), nm = p.given || "this person";
+  const canToggle = ed && (!p.private || p._privLoaded);
+  const sw = h("input", { type: "checkbox", id: "f-private", disabled: !canToggle });
+  sw.checked = !!p.private;
+  sw.addEventListener("change", () => setPrivate(p.id, sw.checked).then(ok => { if (!ok) sw.checked = !sw.checked; }));
+  const who = (isMine(p) ? "you, your close family" : nm + ", close family") + " (parents, partners, children, siblings)";
+  return h("div", { class: "sec" }, h("h3", { text: "Privacy" }),
+    h("label", { class: "chk", for: "f-private" }, sw, "Keep details private"),
+    h("div", { class: "hint", text: p.private
+      ? "Only " + who + " and Dave can see dates, places, photo and stories. Everyone else sees the name, so the tree stays connected."
+      : "Turn on to show dates, places, photo and stories only to " + who + " and Dave. The name always stays in the tree." }),
+    !ed && !p.private ? h("div", { class: "hint", text: "Only " + (ownerNames(p) || "an editor") + " or Dave can change this." }) : null);
+}
+async function setPrivate(id, on) {
+  const p = P(id); if (!p || !canEditCard(p)) return false;
+  if (on && !p.living) { toast("Only living people can be private."); return false; }
+  const FV = firebase.firestore.FieldValue, ref = store.fdb.doc("people/" + id), pref = store.fdb.doc("private/" + id);
+  const now = new Date().toISOString();
+  bump(1);
+  try {
+    await (store.chains.get(id) || Promise.resolve());
+    const b = store.fdb.batch();
+    if (on) {
+      const pv = privBody(p);
+      const upd = { private: true, updatedAt: now }; for (const k of PRIV) upd[k] = FV.delete();
+      b.set(pref, pv); b.update(ref, upd);
+      const see = canSeePrivate(id);
+      if (see) privData.set(id, pv);
+      try { await b.commit(); } catch (e) { privData.delete(id); throw e; }
+      if (!see) privData.delete(id);
+      remergeAll(); if (state.sel === id) buildPanel();
+      toast(see ? "Details are now private" : "Details are now private. You won't see them, since you're not close family.");
+    } else {
+      const upd = { private: false, updatedAt: now }; for (const k of PRIV) upd[k] = p[k] || "";
+      b.update(ref, upd); b.delete(pref);
+      await b.commit();
+      privData.delete(id); remergeAll(); if (state.sel === id) buildPanel();
+      toast("Details are visible to all family again");
+    }
+    return true;
+  } catch (e) { handleWriteError(e); return false; }
+  finally { bump(-1); }
 }
 function refreshPanel() {
   // Keep inputs the user is typing in; refresh everything else from the latest data.
   const p = P(state.sel); if (!p) return;
+  if (panel.dataset.hid !== (hidden(p) ? "1" : "0") || panel.dataset.priv !== (p.private ? "1" : "0") || panel.dataset.ed !== (canEditCard(p) ? "1" : "0")) return buildPanel();
   for (const k of FIELDS) { const el = panel.querySelector("#f-" + k); if (el && el !== document.activeElement && el.value !== (p[k] || "")) el.value = p[k] || ""; }
   updateHead();
   const fam = panel.querySelector(".fam"); if (fam) fam.replaceWith(familyBlock(p));
 }
 function photoControls(p) {
-  if (state.readOnly) return null;
+  if (!canEditCard(p)) return null;
   const file = h("input", { type: "file", accept: "image/*", style: "display:none", id: "photoIn" });
   file.addEventListener("change", () => { if (file.files[0]) uploadPhoto(p.id, file.files[0]); });
   const hasPhoto = !!photoSrc(p);
@@ -1040,7 +1245,7 @@ async function unlink(self, other, kind) {
   reindex(); render(); refreshPanel(); await putAll(changed); toast("Link removed");
 }
 function deleteBtn(p) {
-  if (state.readOnly) return null;
+  if (state.readOnly || (claimsOf(p).length && !isOwnerUser())) return null;
   const b = h("button", { class: "btn danger", text: "Delete person" });
   b.onclick = () => {
     if (b.dataset.armed) return removePerson(p.id);
