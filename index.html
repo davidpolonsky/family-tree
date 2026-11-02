@@ -1306,7 +1306,8 @@ function field(p, key, label, opts = {}) {
   const input = opts.area ? h("textarea", { id, placeholder: opts.ph || "" }) : h("input", { id, type: "text", placeholder: opts.ph || "", autocomplete: "off" });
   input.value = p[key] || "";
   input.disabled = !canEditCard(p);
-  input.addEventListener("input", () => { const cur = P(p.id); if (!cur) return; cur[key] = input.value; pendingEdits.set(p.id, { ...(pendingEdits.get(p.id) || {}), [key]: input.value }); scheduleSave(p.id); softRender(); if (key === "given" || key === "surname" || key.startsWith("birth") || key.startsWith("death")) updateHead(); if (PLACE_KIND[key]) { updateGeoLines(); clearTimeout(geoTimers.get(key)); geoTimers.set(key, setTimeout(() => autoGeo(p.id, PLACE_KIND[key]).then(updateGeoLines), 1500)); } });
+  input.addEventListener("input", () => { const cur = P(p.id); if (!cur) return; cur[key] = input.value; pendingEdits.set(p.id, { ...(pendingEdits.get(p.id) || {}), [key]: input.value }); scheduleSave(p.id); softRender(); if (key === "given" || key === "surname" || key.startsWith("birth") || key.startsWith("death")) updateHead(); if (key === "livesIn" && input.value.trim() && !cur.living) { cur.living = true; pendingEdits.set(p.id, { ...(pendingEdits.get(p.id) || {}), living: true }); const lv = panel.querySelector("#f-living"); if (lv) lv.checked = true; }
+    if (PLACE_KIND[key]) { updateGeoLines(); clearTimeout(geoTimers.get(key)); geoTimers.set(key, setTimeout(() => autoGeo(p.id, PLACE_KIND[key]).then(updateGeoLines), 1500)); } });
   return h("div", { class: "fld" + (opts.full ? " full" : "") }, h("label", { for: id, text: label }), input, PLACE_KIND[key] ? geoLine(p, PLACE_KIND[key]) : null);
 }
 function focusField(k) { const el = panel.querySelector("#f-" + k); if (!el) return; el.focus(); setTimeout(() => el.scrollIntoView({ block: "center", behavior: "smooth" }), 250); }
@@ -1334,7 +1335,9 @@ function buildPanel() {
     Object.entries(STATUS).map(([k, label]) => h("button", { "aria-pressed": String((p.status || "research") === k), disabled: !ed, onclick: async () => { const cur = P(p.id); cur.status = k; render(); buildPanel(); await put(cur); flashSaved(); } }, h("i", { class: "dot " + k }), label)));
   const living = h("input", { type: "checkbox", id: "f-living", disabled: !ed || (p.private && p.living) });
   living.checked = !!p.living;
-  living.addEventListener("change", () => { const cur = P(p.id); cur.living = living.checked; scheduleSave(p.id); buildPanel(); });
+  living.addEventListener("change", () => { const cur = P(p.id); cur.living = living.checked; pendingEdits.set(p.id, { ...(pendingEdits.get(p.id) || {}), living: living.checked }); scheduleSave(p.id); buildPanel(); });
+  const showLives = !!p.living || !(p.deathDate || p.deathPlace);
+  const livingLbl = h("label", { class: "chk", for: "f-living" }, living, "Living");
   const bodyEl = h("div", { class: "p-body" },
     ownerNote(p),
     h("div", { class: "sec" }, h("h3", {}, "How sure are we", h("span", { class: "saved", text: "Saved" })), statusSeg),
@@ -1344,10 +1347,12 @@ function buildPanel() {
     hid ? h("div", { class: "sec" }, h("div", { class: "note" }, lockSvgInline(), " ", privLine(p))) : [
     h("div", { class: "sec" }, h("h3", { text: "Born" }), h("div", { class: "grid2" },
       field(p, "birthDate", "Date", { ph: "e.g. 12 Jan 1927 or abt 1882" }), field(p, "birthPlace", "Place", { ph: "Town, region, country" }))),
-    h("div", { class: "sec" }, h("h3", { text: "Died" }), h("div", { class: "grid2" },
+    // Show "Lives now" unless we know they died, and "Died" unless we know they're living.
+    showLives ? h("div", { class: "sec" }, h("h3", { text: "Lives now" }), h("div", { class: "grid2" }, field(p, "livesIn", "Town or city", { full: true, ph: "e.g. Palm Beach Gardens, Florida" })),
+      livingLbl) : null,
+    p.living ? null : h("div", { class: "sec" }, h("h3", { text: "Died" }), h("div", { class: "grid2" },
       field(p, "deathDate", "Date", { ph: "Leave blank if unknown" }), field(p, "deathPlace", "Place")),
-      h("label", { class: "chk", for: "f-living" }, living, "Living")),
-    p.living ? h("div", { class: "sec" }, h("h3", { text: "Lives now" }), h("div", { class: "grid2" }, field(p, "livesIn", "Town or city", { full: true, ph: "e.g. Palm Beach Gardens, Florida" }))) : null],
+      showLives ? null : livingLbl)],
     privacyBlock(p),
     h("div", { class: "sec" }, h("h3", { text: "Family" }), familyBlock(p)),
     hid ? null : h("div", { class: "sec" }, h("h3", { text: "Story" }), h("div", { class: "grid2" },
