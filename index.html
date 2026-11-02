@@ -290,9 +290,11 @@ body.mapview #mapview{display:block}
 .mapctl .mkey span{display:flex;align-items:center;gap:5px}
 .mapctl .mkey i{width:10px;height:10px;border-radius:50%;display:inline-block}
 .mapctl .mstatus{margin-left:auto;font-style:italic}
-.k-birth{background:var(--accent)} .k-death{background:#8a8f8c} .k-lives{background:var(--brass)}
-.mpin{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;box-shadow:0 1px 4px rgba(0,0,0,.35)}
-.mpin span{width:18px;height:18px;border-radius:50%;background:var(--surface);color:var(--ink);display:grid;place-items:center;font:600 11px/1 var(--font-body)}
+.k-birth{background:#2e8b57} .k-death{background:#c8463d} .k-lives{background:#e8b923}
+.mpin{display:flex;flex-wrap:wrap;justify-content:center;gap:2px;cursor:pointer}
+.mdot{width:25px;height:25px;border-radius:50%;display:grid;place-items:center;font:700 10px/1 var(--font-body);font-style:normal;letter-spacing:.02em;color:#fff;border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.35);box-sizing:border-box}
+.mdot.k-lives{color:#3a2d00}
+.mdot.more{background:#fff;color:var(--ink);font-weight:600}
 .leaflet-container{font-family:var(--font-body);background:var(--bg)}
 .leaflet-popup-content{margin:10px 12px;min-width:200px}
 .mpop .mrow2{display:flex;align-items:center;gap:8px;width:100%;border:0;background:none;text-align:left;padding:6px 4px;border-radius:8px;min-height:44px;color:var(--ink)}
@@ -1637,6 +1639,7 @@ function openMap() {
       if (mapObj.zoomControl) mapObj.zoomControl.setPosition("topright");
       tiles(LF).addTo(mapObj);
       mapLayer = LF.layerGroup().addTo(mapObj);
+      mapObj.on("zoomend", () => drawMap());
     }
     setTimeout(() => { mapObj.invalidateSize(); drawMap(); }, 30);
   }).catch(() => box.replaceChildren(h("div", { class: "muted", text: "The map couldn't load. Check your connection and try again." })));
@@ -1673,20 +1676,22 @@ function drawMap() {
   const evYear = (p, kind) => kind === "birth" ? year(p.birthDate) : kind === "death" ? year(p.deathDate) : (year(p.birthDate) || null);
   const visible = (p, kind) => { const g = (p.geo || {})[kind]; if (!g || g.none || !geoFresh(p, kind)) return false; const y = evYear(p, kind); return y ? y <= until : atEnd; };
 
-  // Group events by spot.
-  const spots = new Map(); let shown = 0;
+  // Group events that would overlap on screen at this zoom; zooming in splits them apart.
+  const spots = []; let shown = 0;
   for (const p of all) {
     if (!show(p)) continue;
     for (const kind of ["birth", "death", "lives"]) {
       if (!visible(p, kind)) continue;
       if (kind === "lives" && !p.living) continue;
-      const g = p.geo[kind], key = g.lat.toFixed(2) + "," + g.lng.toFixed(2);
-      if (!spots.has(key)) spots.set(key, { lat: g.lat, lng: g.lng, name: g.name, ev: [] });
-      spots.get(key).ev.push({ p, kind }); shown++;
+      const g = p.geo[kind], pt = mapObj.latLngToLayerPoint([g.lat, g.lng]);
+      let s = spots.find(c => Math.abs(c.pt.x - pt.x) < 40 && Math.abs(c.pt.y - pt.y) < 40);
+      if (!s) { s = { lat: g.lat, lng: g.lng, pt, names: [], ev: [] }; spots.push(s); }
+      if (!s.names.includes(g.name)) s.names.push(g.name);
+      s.ev.push({ p, kind, place: g.name }); shown++;
     }
   }
+  for (const s of spots) { const t = s.names.map(n => n.split(",")[0]); s.multi = t.length > 1; s.name = s.multi ? (t.length > 3 ? t.slice(0, 3).join(", ") + " and nearby" : t.join(", ")) : s.names[0]; }
   mapLayer.clearLayers();
-  const COL = { birth: "var(--accent)", death: "#8a8f8c", lives: "var(--brass)" };
   // Journeys: where each person was born to where they died or live now.
   for (const p of all) {
     if (!show(p) || !visible(p, "birth")) continue;
@@ -1694,15 +1699,22 @@ function drawMap() {
     if (!endKind) continue;
     const a = p.geo.birth, b = p.geo[endKind];
     if (Math.abs(a.lat - b.lat) < 0.05 && Math.abs(a.lng - b.lng) < 0.05) continue;
-    LF.polyline(arc(a, b), { color: endKind === "lives" ? "#b8893f" : "#6f8f7c", weight: 2, opacity: 0.6, dashArray: endKind === "lives" ? "5 6" : null })
+    LF.polyline(arc(a, b), { color: endKind === "lives" ? "#c99a0e" : "#b04a42", weight: 2, opacity: 0.55, dashArray: endKind === "lives" ? "5 6" : null })
       .bindPopup(() => popupFor({ name: fullName(p), ev: [{ p, kind: "move", from: a.name, to: b.name, endKind }] })).addTo(mapLayer);
   }
   const markers = [];
-  for (const s of spots.values()) {
-    const n = { birth: 0, death: 0, lives: 0 }; s.ev.forEach(e => n[e.kind]++);
-    const tot = s.ev.length, a1 = n.birth / tot * 100, a2 = a1 + n.death / tot * 100;
-    const bg = `conic-gradient(${COL.birth} 0 ${a1}%, ${COL.death} ${a1}% ${a2}%, ${COL.lives} ${a2}% 100%)`;
-    const icon = LF.divIcon({ className: "", iconSize: [28, 28], iconAnchor: [14, 14], popupAnchor: [0, -12], html: `<div class="mpin" style="background:${bg}"><span>${tot}</span></div>` });
+  for (const s of spots) {
+    // One small circle per person at this spot, with their initials, colored by born / lives / died.
+    const order = { birth: 0, lives: 1, death: 2 };
+    const ev = s.ev.slice().sort((a, b) => order[a.kind] - order[b.kind] || byBirth(a.p.id, b.p.id));
+    // In a crowded group, take turns across born / lives / died so every color stays visible.
+    const MAX = 9; let shown = ev;
+    if (ev.length > MAX) { const q = ["birth", "lives", "death"].map(k => ev.filter(e => e.kind === k)); shown = []; while (shown.length < MAX - 1) for (const l of q) if (l.length && shown.length < MAX - 1) shown.push(l.shift()); shown.sort((a, b) => order[a.kind] - order[b.kind]); }
+    const extra = ev.length - shown.length;
+    const esc = t => String(t).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+    const dots = shown.map(e => `<i class="mdot k-${e.kind}" title="${esc(fullName(e.p) + ", " + KIND_LABEL[e.kind].toLowerCase() + " here")}">${esc(initials(e.p))}</i>`).join("") + (extra ? `<i class="mdot more">+${extra}</i>` : "");
+    const cnt = shown.length + (extra ? 1 : 0), cols = Math.min(cnt, 3), rows = Math.ceil(cnt / 3), W = cols * 27 + 2, Hh = rows * 27 + 2;
+    const icon = LF.divIcon({ className: "", iconSize: [W, Hh], iconAnchor: [W / 2, Hh / 2], popupAnchor: [0, -Hh / 2], html: `<div class="mpin" style="width:${W}px">${dots}</div>` });
     const m = LF.marker([s.lat, s.lng], { icon, title: s.name, keyboard: true }).bindPopup(() => popupFor(s), { maxWidth: 280 }).addTo(mapLayer);
     markers.push(m);
   }
@@ -1737,7 +1749,7 @@ function popupFor(s) {
   const ev = s.ev.slice().sort((a, b) => order[a.kind] - order[b.kind] || byBirth(a.p.id, b.p.id));
   return h("div", { class: "mpop" }, h("h4", { text: s.name }),
     ev.map(e => { const y = e.kind === "birth" ? year(e.p.birthDate) : e.kind === "death" ? year(e.p.deathDate) : null;
-      return h("button", { class: "mrow2", onclick: () => go(e.p.id) }, avatar(e.p), h("div", {}, h("div", { class: "t", text: fullName(e.p) }), h("div", { class: "w", text: KIND_LABEL[e.kind] + " here" + (y ? " in " + y : "") }))); }));
+      return h("button", { class: "mrow2", onclick: () => go(e.p.id) }, avatar(e.p), h("div", {}, h("div", { class: "t", text: fullName(e.p) }), h("div", { class: "w", text: (s.multi ? KIND_LABEL[e.kind] + " in " + String(e.place || "").split(",")[0] : KIND_LABEL[e.kind] + " here") + (y ? ", " + y : "") }))); }));
 }
 // Fix a place by hand: search another spelling, or tap the map to drop the pin.
 function openPlacePicker(id, kind) {
