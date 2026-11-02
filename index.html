@@ -207,6 +207,8 @@ header{position:fixed;top:0;left:0;right:0;z-index:30;display:flex;align-items:c
 body.allview .pill.gen{display:none}
 @media (prefers-reduced-motion: reduce){*{transition:none!important}}
 a.btn{text-decoration:none;color:var(--ink);display:inline-flex;align-items:center}
+.yearlab,.yearhead{position:absolute;left:40px;transform:translateY(-50%);font-family:var(--font-display);font-size:30px;color:var(--muted);white-space:nowrap;pointer-events:none}
+.yearhead{font-family:var(--font-body);font-size:15px;letter-spacing:.08em;text-transform:uppercase;transform:none}
 .lock{position:absolute;bottom:7px;right:7px;width:22px;height:22px;border:0;border-radius:50%;background:var(--bg);color:var(--muted);display:grid;place-items:center;padding:0;cursor:pointer}
 .lock svg{width:12px;height:12px}
 .note{background:#f3f0e6;border:1px solid #e4ddca;border-radius:10px;padding:10px 12px;font-size:13px;line-height:1.45;color:var(--ink);margin-bottom:12px}
@@ -797,17 +799,55 @@ function layoutAll() {
   const seg = (x1, y1, x2, y2, cls, pair) => paths.push({ d: `M${x1} ${y1}L${x2} ${y2}`, cls, pair, mid: pair ? [(x1 + x2) / 2, y1] : null });
   const ids = [...people.keys()];
   if (!ids.length) return null;
-  // 1. generations: children below parents, partners level, parents pulled down next to their children
-  const gen = new Map(ids.map(i => [i, 0]));
-  for (let it = 0; it < 80; it++) {
+  // 1. generations. Walk each connected family from the home person: a child sits one row below
+  //    its parents, partners share a row, so siblings always share a row.
+  const gen = new Map(), comp = new Map();
+  const hm0 = getHome();
+  const starts = [...(hm0 && people.has(hm0) ? [hm0] : []), ...ids];
+  let nc = 0;
+  for (const s0 of starts) {
+    if (gen.has(s0)) continue;
+    gen.set(s0, 0); comp.set(s0, nc);
+    const q = [s0];
+    while (q.length) {
+      const x = q.shift(), g = gen.get(x);
+      const nb = [...parentsOf(x).map(p => [p, g - 1]), ...partnersOf(x).map(p => [p, g]), ...childrenOf(x).map(k => [k, g + 1])];
+      for (const [y, gy] of nb) if (!gen.has(y)) { gen.set(y, gy); comp.set(y, nc); q.push(y); }
+    }
+    nc++;
+  }
+  // Rare conflicts (e.g. a marriage across generations): keep children below parents.
+  for (let it = 0; it < 60; it++) {
     let ch = false;
     for (const id of ids) {
       for (const pa of parentsOf(id)) if (gen.get(id) < gen.get(pa) + 1) { gen.set(id, gen.get(pa) + 1); ch = true; }
       for (const pt of partnersOf(id)) { const m = Math.max(gen.get(id), gen.get(pt)); if (gen.get(id) !== m) { gen.set(id, m); ch = true; } }
-      const ks = childrenOf(id);
-      if (ks.length) { const want = Math.min(...ks.map(k => gen.get(k))) - 1; if (gen.get(id) < want) { gen.set(id, want); ch = true; } }
     }
     if (!ch) break;
+  }
+  // Each family group starts at the top row; a separate group (like the Asimov branch)
+  // is then lined up with the main tree by birth years, when we know any.
+  const byComp = new Map();
+  ids.forEach(id => { const c = comp.get(id); if (!byComp.has(c)) byComp.set(c, []); byComp.get(c).push(id); });
+  byComp.forEach(list => { const mn = Math.min(...list.map(i => gen.get(i))); list.forEach(i => gen.set(i, gen.get(i) - mn)); });
+  const groups = [...byComp.values()].sort((a, b) => b.length - a.length);
+  const median = a => { const s = [...a].sort((x, y) => x - y); return s[Math.floor(s.length / 2)]; };
+  const rowYears = new Map();
+  const addYears = list => list.forEach(i => { const y = year(P(i).birthDate); if (y) { const g = gen.get(i); if (!rowYears.has(g)) rowYears.set(g, []); rowYears.get(g).push(y); } });
+  addYears(groups[0]);
+  for (const list of groups.slice(1)) {
+    const known = list.map(i => [gen.get(i), year(P(i).birthDate)]).filter(([, y]) => y);
+    let best = 0, bestCost = Infinity;
+    if (known.length && rowYears.size) {
+      const maxRow = Math.max(...rowYears.keys());
+      for (let off = 0; off <= maxRow; off++) {
+        let cost = 0, n = 0;
+        for (const [g, y] of known) { const r = rowYears.get(g + off); if (r) { cost += Math.abs(median(r) - y); n++; } }
+        if (n && cost / n < bestCost) { bestCost = cost / n; best = off; }
+      }
+    }
+    list.forEach(i => gen.set(i, gen.get(i) + best));
+    addYears(list);
   }
   // 2. visit order from the home person, so related people start near each other
   const ord = new Map(); let c = 0;
@@ -873,7 +913,15 @@ function layoutAll() {
   });
   let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
   for (const n of nodes) { minX = Math.min(minX, n.x - CW / 2); maxX = Math.max(maxX, n.x + CW / 2); minY = Math.min(minY, n.y - CH / 2); maxY = Math.max(maxY, n.y + CH / 2); }
-  return { nodes, paths, ox: -minX + PAD, oy: -minY + PAD, w: maxX - minX + PAD * 2, h: maxY - minY + PAD * 2 };
+  // Birth years down the left edge, from the people in each row whose year we know.
+  const labels = [];
+  for (const g of gens) {
+    const ys = rowYears.get(g); if (!ys || !ys.length) continue;
+    const lo = Math.floor(Math.min(...ys) / 10) * 10, hi = Math.floor(Math.max(...ys) / 10) * 10;
+    labels.push({ y: g * RH, text: lo === hi ? lo + "s" : lo + "s\u2013" + String(hi).slice(2) + "s" });
+  }
+  const LG = 150;
+  return { nodes, paths, labels, ox: -minX + PAD + LG, oy: -minY + PAD, w: maxX - minX + PAD * 2 + LG, h: maxY - minY + PAD * 2 };
 }
 function setView(v) {
   state.view = v;
@@ -901,6 +949,10 @@ function render() {
     svg.append(el);
   }
   const frag = [svg, ...labels];
+  if (L.labels && L.labels.length) {
+    frag.push(h("div", { class: "yearhead", style: `top:${L.oy - 92}px`, text: "Born" }));
+    for (const lb of L.labels) frag.push(h("div", { class: "yearlab", style: `top:${lb.y + L.oy}px`, text: lb.text }));
+  }
   for (const n of L.nodes) frag.push(card(n));
   world.replaceChildren(...frag);
 }
