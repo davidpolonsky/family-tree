@@ -892,6 +892,15 @@ function layoutAll() {
     for (let i = gens.length - 2; i >= 0; i--) place(rows.get(gens[i]), childrenOf);
   }
   for (let i = 1; i < gens.length; i++) place(rows.get(gens[i]), parentsOf);
+  // Separate family groups sit side by side, main tree first, so loose people don't stretch it.
+  let cursor = 0;
+  for (const list of groups) {
+    const us = new Set(list.map(i => unitOf.get(i)));
+    const xs = [...us].flatMap(u => [u.x, u.x + u.members.length]);
+    const mn = Math.min(...xs), mx = Math.max(...xs);
+    us.forEach(u => { u.x += cursor - mn; });
+    cursor += (mx - mn) + 0.8;
+  }
   // 4. nodes and lines
   const X = id => posOf(id) * U, Y = id => gen.get(id) * RH;
   ids.forEach(id => nodes.push({ id, x: X(id), y: Y(id), role: id === state.focus ? "allfocus" : "all" }));
