@@ -193,6 +193,22 @@ header{position:fixed;top:0;left:0;right:0;z-index:30;display:flex;align-items:c
 #world svg path.couple.divorced,#world svg path.couple.separated{stroke-dasharray:6 6;stroke:var(--line)}
 #world svg path.couple.widowed{stroke-dasharray:2 5}
 #world svg path.uncertain{stroke-dasharray:3 5;stroke:var(--research)}
+#world svg path.plink{stroke-dasharray:1 6;stroke:var(--brass);stroke-width:2;stroke-linecap:round;fill:none}
+.plabel{position:absolute;transform:translate(-50%,-50%);font-size:10px;letter-spacing:.04em;color:var(--brass);background:var(--bg);padding:1px 6px;border-radius:5px;border:1px dotted var(--brass);pointer-events:none;white-space:nowrap}
+.lk{position:absolute;right:8px;bottom:6px;font-size:9.5px;letter-spacing:.04em;color:var(--brass);border:1px dotted var(--brass);border-radius:6px;padding:0 5px;line-height:15px;background:var(--surface)}
+.legend .lkline{display:inline-block;width:18px;border-top:2px dotted var(--brass);vertical-align:middle;margin-right:6px}
+.plist{display:flex;flex-direction:column;gap:10px}
+.pitem{border:1px dotted var(--brass);border-radius:12px;padding:10px 12px;background:color-mix(in srgb,var(--brass) 6%,var(--surface))}
+.pitem .ptop{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.pitem .pwho{border:0;background:none;padding:0;font-weight:600;font-size:14px;color:var(--ink);text-decoration:underline;text-underline-offset:3px;cursor:pointer}
+.pitem .prel{font-size:13px;color:var(--ink)}
+.pitem .pst{font-size:11px;color:var(--muted);display:inline-flex;align-items:center;gap:5px}
+.pitem .pst .dot{position:static}
+.pitem .pmeta{font-size:12.5px;color:var(--muted);margin-top:6px;white-space:pre-wrap}
+.pitem .prm{margin-left:auto;border:0;background:none;color:var(--muted);font-size:12px;cursor:pointer}
+.pitem .prm:hover{color:var(--danger)}
+.padd{display:grid;gap:8px;margin-top:10px}
+.padd select,.padd input,.padd textarea{width:100%;font:inherit;font-size:14px;padding:8px 10px;border:1px solid var(--grid);border-radius:10px;background:var(--bg);color:var(--ink)}
 .nee{font-size:11.5px;color:var(--muted);font-style:italic;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .ulabel{position:absolute;transform:translate(-50%,-50%);font-size:10px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);background:var(--bg);padding:1px 5px;border-radius:5px;border:1px solid var(--grid);pointer-events:none;white-space:nowrap}
 .p-head h2.editable{cursor:text}
@@ -363,6 +379,7 @@ body.mapview #mapview{display:block}
   <span><i class="dot confirmed"></i>Documented</span>
   <span><i class="dot story"></i>Family story</span>
   <span><i class="dot research"></i>Needs research</span>
+  <span><i class="lkline"></i>Possible connection</span>
 </div>
 
 <div id="gate" class="gate"></div>
@@ -381,6 +398,18 @@ body.mapview #mapview{display:block}
 /* ---------- constants & state ---------- */
 const U = 212, CW = 184, CH = 100, RH = 176, PAD = 120;
 const STATUS = { confirmed: "Documented", story: "Family story", research: "Needs research" };
+const LINK_STATUS = { story: "Family story", research: "Needs research", confirmed: "Confirmed", ruledout: "Ruled out" };
+// Possible connections: a link between two people whose exact relationship isn't known yet.
+// Stored once, on one person's card, as links: [{ to, rel, source, evidence, status, added }].
+function linksOf(id) {
+  const out = [];
+  for (const p of people.values()) for (const [i, l] of (p.links || []).entries()) {
+    if (!l || !l.to) continue;
+    if (p.id === id && people.has(l.to)) out.push({ ...l, owner: p.id, idx: i, other: l.to });
+    else if (l.to === id) out.push({ ...l, owner: p.id, idx: i, other: p.id });
+  }
+  return out;
+}
 const FIELDS = ["given","surname","birthSurname","aka","birthDate","birthPlace","deathDate","deathPlace","livesIn","notes","sources"];
 // Details that move to the private/<id> doc when a living person's details are private.
 const PRIV = ["aka","birthDate","birthPlace","deathDate","deathPlace","livesIn","geo","notes","sources","photoData","photoId"];
@@ -1098,6 +1127,19 @@ function render() {
     if (cls) el.setAttribute("class", cls);
     svg.append(el);
   }
+  const onScreen = new Map(L.nodes.map(n => [n.id, n])), drawn = new Set();
+  for (const n of L.nodes) for (const l of linksOf(n.id)) {
+    const o = onScreen.get(l.other); if (!o || l.status === "ruledout") continue;
+    const key = [n.id, l.other].sort().join("|") + "|" + l.idx; if (drawn.has(key)) continue; drawn.add(key);
+    const ax = n.x + L.ox, ay = n.y + L.oy, bx = o.x + L.ox, by = o.y + L.oy;
+    const sx = ax + Math.sign(bx - ax || 1) * CW / 2, ex = bx - Math.sign(bx - ax || 1) * CW / 2;
+    const lift = Math.max(60, Math.abs(bx - ax) * 0.15), my = Math.min(ay, by) - lift;
+    const el = document.createElementNS(NS, "path");
+    el.setAttribute("d", `M ${sx} ${ay} C ${sx} ${my}, ${ex} ${my}, ${ex} ${by}`);
+    el.setAttribute("class", "plink");
+    svg.append(el);
+    if (l.rel) labels.push(h("span", { class: "plabel", style: `left:${(sx + ex) / 2}px;top:${(ay + by) / 2 - lift * 0.75}px`, text: l.rel + "?" }));
+  }
   const frag = [svg, ...labels];
   buildYAxis();
   for (const n of L.nodes) frag.push(card(n));
@@ -1119,6 +1161,7 @@ function card(n) {
       p.birthSurname && p.surname && p.birthSurname.trim().toLowerCase() !== p.surname.trim().toLowerCase() ? h("div", { class: "nee", text: "n\u00e9e " + p.birthSurname }) : null,
       p.birthPlace ? h("div", { class: "pl", text: p.birthPlace }) : null),
     h("i", { class: "dot " + (p.status || "research"), title: STATUS[p.status] || STATUS.research }),
+    (() => { const ls = linksOf(n.id).filter(l => l.status !== "ruledout"); return ls.length ? h("span", { class: "lk", title: "Possible connection: " + ls.map(l => (l.rel ? l.rel + " of " : "") + fullName(P(l.other))).join("; "), text: "link" }) : null; })(),
     p.private ? h("button", { class: "lock", "aria-label": "Why these details are private", title: privLine(p), onclick: e => { e.stopPropagation(); toast(privLine(p)); } }, lockSvg()) : null
   );
   if (n.role === "focus" && !state.readOnly) {
@@ -1400,6 +1443,7 @@ function buildPanel() {
       showLives ? null : livingLbl)],
     privacyBlock(p),
     h("div", { class: "sec" }, h("h3", { text: "Family" }), familyBlock(p)),
+    linksBlock(p),
     hid ? null : h("div", { class: "sec" }, h("h3", { text: "Story" }), h("div", { class: "grid2" },
       field(p, "notes", "Stories and notes", { area: true, full: true, ph: "What the family remembers" }),
       field(p, "sources", "Sources", { area: true, full: true, ph: "Records, recordings, who told us" }))),
@@ -1505,6 +1549,44 @@ async function uploadPhoto(id, f) {
     }
     render(); buildPanel(); await put(cur); toast("Photo added");
   } catch (e) { toast("That photo could not be added. Try a JPG or PNG under 20 MB."); }
+}
+function linksBlock(p) {
+  const ls = linksOf(p.id), canEdit = !state.readOnly;
+  if (!ls.length && !canEdit) return null;
+  const items = ls.map(l => {
+    const o = P(l.other), meta = [l.source ? "Source: " + l.source : "", l.evidence ? "Evidence: " + l.evidence : ""].filter(Boolean).join("\n");
+    const st = l.status || "story";
+    return h("div", { class: "pitem" },
+      h("div", { class: "ptop" },
+        h("button", { class: "pwho", onclick: () => select(l.other), text: fullName(o) }),
+        l.rel ? h("span", { class: "prel", text: "\u00b7 " + l.rel }) : null,
+        h("span", { class: "pst" }, h("i", { class: "dot " + (st === "confirmed" ? "confirmed" : st === "story" ? "story" : "research") }), LINK_STATUS[st] || st),
+        canEdit ? h("button", { class: "prm", text: "Remove", onclick: async () => {
+          const owner = P(l.owner); if (!owner) return;
+          owner.links = (owner.links || []).filter((_, i) => i !== l.idx);
+          render(); buildPanel(); await put(owner); toast("Connection removed.");
+        } }) : null),
+      meta ? h("div", { class: "pmeta", text: meta }) : null);
+  });
+  let form = null;
+  if (canEdit) {
+    const others = [...people.values()].filter(o => o.id !== p.id).sort((a, b) => fullName(a).localeCompare(fullName(b)));
+    const who = h("select", { "aria-label": "Connected to" }, h("option", { value: "", text: "Connected to\u2026" }), ...others.map(o => h("option", { value: o.id, text: fullName(o) + (lifeLine(o) ? " (" + lifeLine(o) + ")" : "") })));
+    const rel = h("input", { placeholder: "How, as told (e.g. first cousins)" });
+    const src = h("input", { placeholder: "Who says so (e.g. Janet, family story)" });
+    const ev = h("textarea", { rows: "3", placeholder: "Evidence or clues so far" });
+    const st = h("select", { "aria-label": "How sure" }, ...Object.entries(LINK_STATUS).map(([k, v]) => h("option", { value: k, text: v })));
+    form = h("div", { class: "padd" }, who, rel, src, ev, st,
+      h("button", { class: "btn", text: "Add possible connection", onclick: async () => {
+        if (!who.value) { toast("Choose who they're connected to."); return; }
+        const cur = P(p.id);
+        cur.links = [...(cur.links || []), { to: who.value, rel: rel.value.trim(), source: src.value.trim(), evidence: ev.value.trim(), status: st.value, added: new Date().toISOString().slice(0, 10) }];
+        render(); buildPanel(); await put(cur); toast("Connection added.");
+      } }));
+  }
+  return h("div", { class: "sec" }, h("h3", { text: "Possible connections" }),
+    ls.length ? h("div", { class: "plist" }, items) : h("div", { class: "note", text: "Link to someone when the family says you're related but the exact line isn't known." }),
+    form ? h("details", {}, h("summary", { text: "Add a possible connection" }), form) : null);
 }
 function familyBlock(p) {
   const groups = [
