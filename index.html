@@ -207,8 +207,12 @@ header{position:fixed;top:0;left:0;right:0;z-index:30;display:flex;align-items:c
 body.allview .pill.gen{display:none}
 @media (prefers-reduced-motion: reduce){*{transition:none!important}}
 a.btn{text-decoration:none;color:var(--ink);display:inline-flex;align-items:center}
-.yearlab,.yearhead{position:absolute;left:40px;transform:translateY(-50%);font-family:var(--font-display);font-size:30px;color:var(--muted);white-space:nowrap;pointer-events:none}
-.yearhead{font-family:var(--font-body);font-size:15px;letter-spacing:.08em;text-transform:uppercase;transform:none}
+.yaxis{position:fixed;left:0;top:61px;bottom:0;width:92px;z-index:10;pointer-events:none;background:linear-gradient(90deg,color-mix(in srgb,var(--bg) 92%,transparent) 60%,transparent);display:none}
+.yaxis.show{display:block}
+.yaxis .yh{position:absolute;left:14px;top:10px;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.yaxis .yl{position:absolute;left:14px;transform:translateY(-50%);font-family:var(--font-display);font-size:21px;line-height:1;color:var(--muted);white-space:nowrap}
+.yaxis.anim .yl{transition:top .5s cubic-bezier(.2,.7,.2,1),opacity .2s}
+@media (max-width:760px){.yaxis{width:62px}.yaxis .yl{font-size:13px;left:6px}.yaxis .yh{left:6px;font-size:9.5px}}
 .lock{position:absolute;bottom:7px;right:7px;width:22px;height:22px;border:0;border-radius:50%;background:var(--bg);color:var(--muted);display:grid;place-items:center;padding:0;cursor:pointer}
 .lock svg{width:12px;height:12px}
 .note{background:#f3f0e6;border:1px solid #e4ddca;border-radius:10px;padding:10px 12px;font-size:13px;line-height:1.45;color:var(--ink);margin-bottom:12px}
@@ -220,6 +224,7 @@ a.btn{text-decoration:none;color:var(--ink);display:inline-flex;align-items:cent
 </head>
 <body>
 <div id="vp"><div id="world"></div></div>
+<div id="yaxis" class="yaxis" aria-hidden="true"></div>
 
 <header>
   <div class="brand"><b>The Family Tree</b><small id="count">Opening the tree</small></div>
@@ -922,15 +927,8 @@ function layoutAll() {
   });
   let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
   for (const n of nodes) { minX = Math.min(minX, n.x - CW / 2); maxX = Math.max(maxX, n.x + CW / 2); minY = Math.min(minY, n.y - CH / 2); maxY = Math.max(maxY, n.y + CH / 2); }
-  // Birth years down the left edge, from the people in each row whose year we know.
-  const labels = [];
-  for (const g of gens) {
-    const ys = rowYears.get(g); if (!ys || !ys.length) continue;
-    const lo = Math.floor(Math.min(...ys) / 10) * 10, hi = Math.floor(Math.max(...ys) / 10) * 10;
-    labels.push({ y: g * RH, text: lo === hi ? lo + "s" : lo + "s\u2013" + String(hi).slice(2) + "s" });
-  }
-  const LG = 150;
-  return { nodes, paths, labels, ox: -minX + PAD + LG, oy: -minY + PAD, w: maxX - minX + PAD * 2 + LG, h: maxY - minY + PAD * 2 };
+  const LG = 90;
+  return { nodes, paths, ox: -minX + PAD + LG, oy: -minY + PAD, w: maxX - minX + PAD * 2 + LG, h: maxY - minY + PAD * 2 };
 }
 function setView(v) {
   state.view = v;
@@ -958,10 +956,7 @@ function render() {
     svg.append(el);
   }
   const frag = [svg, ...labels];
-  if (L.labels && L.labels.length) {
-    frag.push(h("div", { class: "yearhead", style: `top:${L.oy - 92}px`, text: "Born" }));
-    for (const lb of L.labels) frag.push(h("div", { class: "yearlab", style: `top:${lb.y + L.oy}px`, text: lb.text }));
-  }
+  buildYAxis();
   for (const n of L.nodes) frag.push(card(n));
   world.replaceChildren(...frag);
 }
@@ -1016,7 +1011,31 @@ function select(id) {
 /* ---------- camera ---------- */
 const cam = { x: 0, y: 0, k: 1 };
 const panelW = () => (panel.classList.contains("open") && innerWidth > 760 ? 400 : 0);
-function applyCam(anim) { world.style.transition = anim ? "transform .5s cubic-bezier(.2,.7,.2,1)" : "none"; world.style.transform = `translate(${cam.x}px,${cam.y}px) scale(${cam.k})`; }
+function applyCam(anim) { world.style.transition = anim ? "transform .5s cubic-bezier(.2,.7,.2,1)" : "none"; world.style.transform = `translate(${cam.x}px,${cam.y}px) scale(${cam.k})`; placeYAxis(anim); }
+// Birth decades pinned to the left edge. Each row's label comes from the known birth years
+// of the people drawn in that row, and follows the row as you pan and zoom.
+const yaxis = $("#yaxis");
+let yRows = [];
+function decadeLabel(ys) {
+  const lo = Math.floor(Math.min(...ys) / 10) * 10, hi = Math.floor(Math.max(...ys) / 10) * 10;
+  return lo === hi ? lo + "s" : lo + "s\u2013" + String(hi).slice(2) + "s";
+}
+function buildYAxis() {
+  const byY = new Map();
+  for (const n of L.nodes) { const y = year(P(n.id)?.birthDate); if (!byY.has(n.y)) byY.set(n.y, []); if (y) byY.get(n.y).push(y); }
+  yRows = [...byY.entries()].filter(([, ys]) => ys.length).sort((a, b) => a[0] - b[0]).map(([y, ys]) => ({ y: y + L.oy, el: h("div", { class: "yl", text: decadeLabel(ys) }) }));
+  yaxis.replaceChildren(h("div", { class: "yh", text: "Born" }), ...yRows.map(r => r.el));
+  yaxis.classList.toggle("show", yRows.length > 0);
+  placeYAxis(false);
+}
+function placeYAxis(anim) {
+  yaxis.classList.toggle("anim", !!anim);
+  for (const r of yRows) {
+    const top = cam.y + r.y * cam.k - 61;
+    r.el.style.top = top + "px";
+    r.el.style.opacity = top < 34 || top > innerHeight - 70 ? "0" : "1";
+  }
+}
 function viewBox() { const top = 60, bottom = innerWidth <= 760 && panel.classList.contains("open") ? innerHeight * 0.6 : 64; return { x: 0, y: top, w: innerWidth - panelW(), h: innerHeight - top - bottom }; }
 function centerOn(id, anim, fitScale) {
   if (!L) return;
