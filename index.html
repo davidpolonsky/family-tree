@@ -1068,14 +1068,37 @@ function layoutAll() {
   }
   for (let i = 1; i < gens.length; i++) place(rows.get(gens[i]), parentsOf);
   // Separate family groups sit side by side, main tree first, so loose people don't stretch it.
-  let cursor = 0;
-  for (const list of groups) {
+  // A group tied to one already placed by a possible connection goes next, on the side nearest
+  // that person, so the dotted line stays short.
+  const gOf = new Map(); groups.forEach((list, gi) => list.forEach(i => gOf.set(i, gi)));
+  const span = groups.map(list => {
     const us = new Set(list.map(i => unitOf.get(i)));
     const xs = [...us].flatMap(u => [u.x, u.x + u.members.length]);
-    const mn = Math.min(...xs), mx = Math.max(...xs);
-    us.forEach(u => { u.x += cursor - mn; });
-    cursor += (mx - mn) + 0.8;
+    return { us, mn: Math.min(...xs), mx: Math.max(...xs) };
+  });
+  const ties = groups.map(() => []);
+  for (const p of people.values()) for (const l of (p.links || [])) {
+    if (!l || !l.to || !people.has(l.to) || l.status === "ruledout") continue;
+    const a = gOf.get(p.id), b = gOf.get(l.to); if (a === undefined || b === undefined || a === b) continue;
+    ties[a].push([b, l.to]); ties[b].push([a, p.id]);
   }
+  const shift = groups.map(() => 0), done = new Set();
+  let edgeL = 0, edgeR = 0;
+  while (done.size < groups.length) {
+    let gi = -1, side = 1;
+    for (let k = 0; k < groups.length && gi < 0; k++) {
+      if (done.has(k)) continue;
+      const t = ties[k].find(([o]) => done.has(o));
+      if (t) { gi = k; const x = posOf(t[1]) + shift[t[0]]; side = x - edgeL < edgeR - x ? -1 : 1; }
+    }
+    if (gi < 0) for (let k = 0; k < groups.length; k++) if (!done.has(k)) { gi = k; break; }
+    const w = span[gi].mx - span[gi].mn;
+    if (!done.size) { shift[gi] = -span[gi].mn; edgeR = w; }
+    else if (side < 0) { edgeL -= w + 0.8; shift[gi] = edgeL - span[gi].mn; }
+    else { shift[gi] = edgeR + 0.8 - span[gi].mn; edgeR += w + 0.8; }
+    done.add(gi);
+  }
+  groups.forEach((_, gi) => span[gi].us.forEach(u => { u.x += shift[gi] - edgeL; }));
   // 4. nodes and lines
   const X = id => posOf(id) * U, Y = id => gen.get(id) * RH;
   ids.forEach(id => nodes.push({ id, x: X(id), y: Y(id), role: id === state.focus ? "allfocus" : "all" }));
